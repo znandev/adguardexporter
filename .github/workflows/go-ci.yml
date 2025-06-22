@@ -27,6 +27,6 @@ jobs:
         run: go test -v ./...
 
       - name: Lint code
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v8
         with:
           version: latest
