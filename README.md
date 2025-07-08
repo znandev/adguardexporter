@@ -78,7 +78,7 @@ docker run -d \
   -e EXPORTER_PORT=9617 \
   -e SCRAPE_INTERVAL=15s \
   -e LOG_LEVEL=DEBUG
-  znanddev/adguard-exporter:latest
+  ghcr.io/znand-dev/adguardexporter:latest
 ```
 
 ---
@@ -92,7 +92,7 @@ version: '3.8'
 
 services:
   adguard-exporter:
-    image: znanddev/adguard-exporter:latest
+    image: ghcr.io/znand-dev/adguardexporter:latest
     container_name: adguard_exporter
     restart: unless-stopped
     ports:
