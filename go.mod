@@ -2,7 +2,7 @@ module github.com/znand-dev/adguardexporter
 
 go 1.23.0
 
-toolchain go1.24.6
+toolchain go1.25.0
 
 require (
 	github.com/joho/godotenv v1.5.1
