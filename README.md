@@ -185,7 +185,7 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 Grafana Dashboard Preview
 
-[Live preview and monitoring, click here](https://stats.znand.my.id/public-dashboards/ddc0442fa8bb4227838c7085e69e9bac)
+[Live preview and monitoring, click here](https://stats.znand.my.id/public-dashboards/a0b05deb37464a17b01cbc69eb65ac5a?orgId=1&refresh=5s)
 
 ![dashboard1](./grafana/dashboard1.png)
 
