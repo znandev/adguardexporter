@@ -11,7 +11,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o adguard-exporter .
 
 # Tahap ambil certs
-FROM --platform=$BUILDPLATFORM alpine:3.22.1 AS certs
+FROM --platform=$BUILDPLATFORM alpine:3.22.2 AS certs
 RUN apk add --no-cache ca-certificates
 
 # Final image
