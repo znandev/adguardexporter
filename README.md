@@ -186,6 +186,7 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 Grafana Dashboard Preview
 
 [Live preview and monitoring, click here](https://stats.znand.my.id/public-dashboards/a0b05deb37464a17b01cbc69eb65ac5a?orgId=1&refresh=5s)
+[Deploy yours here](https://grafana.com/grafana/dashboards/23579-adguard-metrics-statistics/)
 
 ![dashboard1](./grafana/dashboard1.png)
 
