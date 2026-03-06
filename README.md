@@ -29,12 +29,12 @@ A lightweight Prometheus exporter written in Go that exposes detailed metrics fr
 Before running this exporter, make sure:
 
 - AdGuard Home is up and running
-- You have a valid AdGuard username & password
+- You have a valid AdGuard username & password (without special character)
 - Prometheus is configured to scrape this exporter
 - Docker installed (or alternatively Go 1.20+ for building from source)
 - Port `9617` is available on your system
 
-To make sure the endpoint is valid, you can check the endpoints via curl
+To make sure the endpoint is valid, you can check the endpoints via curl:
 
 ```
 curl -v -u <yourusername>:<yourpassword> <ADGUARD_URL>:<PORT>/control/stats
