@@ -352,7 +352,185 @@ func fetchQueryLog() (*AdGuardQueryLog, error) {
 	return &logData, err
 }
 
+func fetchStats() (*AdGuardStats, error) {
+
+	host := os.Getenv("ADGUARD_HOST")
+	user := os.Getenv("ADGUARD_USER")
+	pass := os.Getenv("ADGUARD_PASS")
+
+	url := host + "/control/stats"
+
+	req, _ := http.NewRequest("GET", url, nil)
+	req.SetBasicAuth(user, pass)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	resp, err := client.Do(req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logX("WARN", "failed to close response body: %v", err)
+		}
+	}()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	var stats AdGuardStats
+
+	err = json.Unmarshal(body, &stats)
+
+	return &stats, err
+}
+
+func fetchStatus() (*AdGuardStatus, error) {
+
+	host := os.Getenv("ADGUARD_HOST")
+	user := os.Getenv("ADGUARD_USER")
+	pass := os.Getenv("ADGUARD_PASS")
+
+	url := host + "/control/status"
+
+	req, _ := http.NewRequest("GET", url, nil)
+	req.SetBasicAuth(user, pass)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	resp, err := client.Do(req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logX("WARN", "failed to close response body: %v", err)
+		}
+	}()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	var status AdGuardStatus
+
+	err = json.Unmarshal(body, &status)
+
+	return &status, err
+}
+
+func updateStatsMetrics() {
+
+	stats, err := fetchStats()
+
+	if err != nil {
+		logX("ERROR", "Failed fetch stats: %v", err)
+		return
+	}
+
+	dnsQueries.Set(stats.NumDNSQueries)
+	blockedFiltering.Set(stats.NumBlockedFiltering)
+	replacedParental.Set(stats.NumReplacedParental)
+	avgProcessingTime.Set(stats.AvgProcessingTime)
+
+	// reset gauge vectors
+	topQueriedDomains.Reset()
+	topBlockedDomains.Reset()
+	topClients.Reset()
+	topUpstreams.Reset()
+	topUpstreamTime.Reset()
+
+	// top queried domains
+	for _, d := range stats.TopQueriedDomains {
+		for domain, count := range d {
+			topQueriedDomains.WithLabelValues(domain).Set(count)
+		}
+	}
+
+	// top blocked domains
+	for _, d := range stats.TopBlockedDomains {
+		for domain, count := range d {
+			topBlockedDomains.WithLabelValues(domain).Set(count)
+		}
+	}
+
+	// top clients
+	for _, c := range stats.TopClients {
+		for client, count := range c {
+			topClients.WithLabelValues(client).Set(count)
+		}
+	}
+
+	// upstream responses
+	for _, u := range stats.TopUpstream {
+		for upstream, count := range u {
+			topUpstreams.WithLabelValues(upstream).Set(count)
+		}
+	}
+
+	// upstream avg response time
+	for _, u := range stats.TopUpstreamTime {
+		for upstream, time := range u {
+			topUpstreamTime.WithLabelValues(upstream).Set(time)
+		}
+	}
+
+	logX(
+		"DEBUG",
+		"Fetched stats: queries=%.0f blocked=%.0f replaced=%.0f avgTime=%.2fms topDomains=%d",
+		stats.NumDNSQueries,
+		stats.NumBlockedFiltering,
+		stats.NumReplacedParental,
+		stats.AvgProcessingTime,
+		len(stats.TopQueriedDomains),
+	)
+}
+
+func updateStatusMetrics() {
+
+	status, err := fetchStatus()
+
+	if err != nil {
+		logX("ERROR", "Failed fetch status: %v", err)
+		return
+	}
+
+	if status.Running {
+		statusRunning.Set(1)
+	} else {
+		statusRunning.Set(0)
+	}
+
+	if status.ProtectionEnabled {
+		statusProtectionEnabled.Set(1)
+	} else {
+		statusProtectionEnabled.Set(0)
+	}
+
+	if status.DHCPAvailable {
+		statusDHCPAvailable.Set(1)
+	} else {
+		statusDHCPAvailable.Set(0)
+	}
+
+	statusDisabledDuration.Set(float64(status.ProtectionDisabledDuration))
+
+	versionInfo.WithLabelValues(status.Version).Set(1)
+
+	logX(
+		"DEBUG",
+		"Fetched status: running=%v protection=%v DHCP=%v version=%s",
+		status.Running,
+		status.ProtectionEnabled,
+		status.DHCPAvailable,
+		status.Version,
+	)
+}
+
 func updateQueryLogMetrics() {
+
+    geoResolved := 0
 
         logData, err := fetchQueryLog()
 
@@ -379,6 +557,7 @@ func updateQueryLogMetrics() {
                 geo, ok := resolveGeo(q.Client)
 
                 if ok {
+					geoResolved++
 
                         clientGeoQueries.WithLabelValues(
                                 q.Client,
@@ -403,7 +582,12 @@ func updateQueryLogMetrics() {
                 }
         }
 
-        logX("DEBUG", "Processed %d querylog entries", len(logData.Data))
+		logX(
+	        "DEBUG",
+	        "Processed %d querylog entries | GeoIP resolved: %d",
+	        len(logData.Data),
+	        geoResolved,
+        )
 }
 
 func main() {
@@ -421,6 +605,7 @@ func main() {
 	}
 
 	geoDB = db
+	logX("INFO", "GeoIP database loaded")
 
 	scrapeIntervalStr := os.Getenv("SCRAPE_INTERVAL")
 	port := os.Getenv("EXPORTER_PORT")
@@ -439,6 +624,8 @@ func main() {
 
 		for {
 
+			updateStatsMetrics()
+		    updateStatusMetrics()
 			updateQueryLogMetrics()
 
 			time.Sleep(time.Duration(interval) * time.Second)
