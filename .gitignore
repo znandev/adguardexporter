@@ -7,3 +7,6 @@ dist/
 # OS / Editor files
 .DS_Store
 *.swp
+
+#db
+GeoLite2-City.mmdb
