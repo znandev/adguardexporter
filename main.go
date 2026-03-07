@@ -57,16 +57,27 @@ func logX(level string, format string, args ...interface{}) {
 	}
 }
 
+//function hash query
+func buildQueryKey(client, domain, upstream, reason, elapsed string) string {
+	return client + "|" + domain + "|" + upstream + "|" + reason + "|" + elapsed
+}
+
 type GeoCache struct {
 	Country string
 	Lat     float64
 	Lon     float64
+	TS      int64
 }
 
 var (
 	geoDB    *geoip2.Reader
 	geoCache = map[string]GeoCache{}
 	geoMutex sync.RWMutex
+	// cache query hash
+	querySeen   = map[string]int64{}
+	queryMutex  sync.Mutex
+	queryTTL    = int64(300) // 5 menit
+	geoTTL      = int64(86400) // 24 jam
 )
 
 type AdGuardStats struct {
@@ -247,14 +258,47 @@ var (
 		[]string{"client", "country", "lat", "lon"},
 	)
 
-        blockedGeoQueries = prometheus.NewCounterVec(
-                prometheus.CounterOpts{
-                        Name: "adguard_blocked_geo_queries",
-                        Help: "Blocked DNS queries per client with geographic info",
-                },
-                []string{"client", "country", "lat", "lon"},
-        )
+    blockedGeoQueries = prometheus.NewCounterVec(
+        prometheus.CounterOpts{
+            Name: "adguard_blocked_geo_queries",
+            Help: "Blocked DNS queries per client with geographic info",
+        },
+        []string{"client", "country", "lat", "lon"},
+    )
+    
+    upstreamLatencyHistogram = prometheus.NewHistogramVec(
+	    prometheus.HistogramOpts{
+		    Name: "adguard_upstream_latency_seconds",
+		    Help: "Latency distribution per upstream DNS server",
+		    Buckets: prometheus.ExponentialBuckets(
+			    0.001, // 1ms
+			    2,
+			    10,
+		    ),
+	    },
+	    []string{"upstream"},
+    )
 
+	exporterUp = prometheus.NewGauge(
+	    prometheus.GaugeOpts{
+		    Name: "adguard_exporter_up",
+		    Help: "Exporter scrape success",
+	    },
+    )
+
+    exporterScrapeDuration = prometheus.NewGauge(
+	    prometheus.GaugeOpts{
+		    Name: "adguard_exporter_scrape_duration_seconds",
+		    Help: "Exporter scrape duration",
+	   },
+    )
+
+    exporterErrors = prometheus.NewCounter(
+	    prometheus.CounterOpts{
+		    Name: "adguard_exporter_scrape_errors_total",
+		    Help: "Total exporter errors",
+	   },
+    )
 )
 
 func init() {
@@ -283,7 +327,11 @@ func init() {
 		queryCountByDomain,
 		queryCountClientReason,
 		clientGeoQueries,
-                blockedGeoQueries,
+        blockedGeoQueries,
+		exporterUp,
+        exporterScrapeDuration,
+        exporterErrors,
+		upstreamLatencyHistogram,
 	)
 }
 
@@ -294,10 +342,17 @@ func resolveGeo(ipStr string) (GeoCache, bool) {
 		return GeoCache{}, false
 	}
 
+	now := time.Now().Unix()
+
 	geoMutex.RLock()
 	if val, ok := geoCache[ipStr]; ok {
-		geoMutex.RUnlock()
-		return val, true
+
+		// cache valid
+		if now-val.TS < geoTTL {
+			geoMutex.RUnlock()
+			return val, true
+		}
+
 	}
 	geoMutex.RUnlock()
 
@@ -310,6 +365,7 @@ func resolveGeo(ipStr string) (GeoCache, bool) {
 		Country: record.Country.IsoCode,
 		Lat:     record.Location.Latitude,
 		Lon:     record.Location.Longitude,
+		TS:      now,
 	}
 
 	geoMutex.Lock()
@@ -530,64 +586,113 @@ func updateStatusMetrics() {
 
 func updateQueryLogMetrics() {
 
-    geoResolved := 0
+	geoResolved := 0
 
-        logData, err := fetchQueryLog()
+	logData, err := fetchQueryLog()
 
-        if err != nil {
-                logX("ERROR", "Failed querylog: %v", err)
-                return
-        }
+	if err != nil {
+		logX("ERROR", "Failed querylog: %v", err)
+		return
+	}
 
-        for _, q := range logData.Data {
+	for _, q := range logData.Data {
 
-                queryCountByReason.WithLabelValues(q.Reason).Inc()
-                queryCountByType.WithLabelValues(q.Question.Type).Inc()
+		// dedup logic
+		key := buildQueryKey(
+			q.Client,
+			q.Question.Name,
+			q.Upstream,
+			q.Reason,
+			q.Elapsed,
+		)
 
-                elapsedMs, err := strconv.ParseFloat(q.Elapsed, 64)
+		now := time.Now().Unix()
 
-                if err == nil {
-                        queryHistogramByClient.WithLabelValues(q.Client).Observe(elapsedMs)
-                }
+		queryMutex.Lock()
 
-                queryCountByUpstream.WithLabelValues(q.Upstream).Inc()
-                queryCountByDomain.WithLabelValues(q.Question.Name).Inc()
-                queryCountClientReason.WithLabelValues(q.Client, q.Reason).Inc()
+		if ts, exists := querySeen[key]; exists {
 
-                geo, ok := resolveGeo(q.Client)
+			if now-ts < queryTTL {
+				queryMutex.Unlock()
+				continue
+			}
 
-                if ok {
-					geoResolved++
+		}
 
-                        clientGeoQueries.WithLabelValues(
-                                q.Client,
-                                geo.Country,
-                                fmt.Sprintf("%f", geo.Lat),
-                                fmt.Sprintf("%f", geo.Lon),
-                        ).Inc()
+		querySeen[key] = now
+		queryMutex.Unlock()
 
-                        // detect blocked queries
-                        if q.Reason == "FilteredBlackList" ||
-                                q.Reason == "FilteredSafeBrowsing" ||
-                                q.Reason == "FilteredParental" {
+		queryCountByReason.WithLabelValues(q.Reason).Inc()
+		queryCountByType.WithLabelValues(q.Question.Type).Inc()
 
-                                blockedGeoQueries.WithLabelValues(
-                                        q.Client,
-                                        geo.Country,
-                                        fmt.Sprintf("%f", geo.Lat),
-                                        fmt.Sprintf("%f", geo.Lon),
-                                ).Inc()
+		elapsedMs, err := strconv.ParseFloat(q.Elapsed, 64)
 
-                        }
-                }
-        }
+		if err == nil {
 
-		logX(
-	        "DEBUG",
-	        "Processed %d querylog entries | GeoIP resolved: %d",
-	        len(logData.Data),
-	        geoResolved,
-        )
+			queryHistogramByClient.WithLabelValues(q.Client).Observe(elapsedMs)
+
+			if q.Upstream != "" {
+				upstreamLatencyHistogram.WithLabelValues(q.Upstream).Observe(elapsedMs / 1000)
+			}
+
+		}
+
+		queryCountByUpstream.WithLabelValues(q.Upstream).Inc()
+		queryCountByDomain.WithLabelValues(q.Question.Name).Inc()
+		queryCountClientReason.WithLabelValues(q.Client, q.Reason).Inc()
+
+		geo, ok := resolveGeo(q.Client)
+
+		if ok {
+
+			geoResolved++
+
+			clientGeoQueries.WithLabelValues(
+				q.Client,
+				geo.Country,
+				fmt.Sprintf("%f", geo.Lat),
+				fmt.Sprintf("%f", geo.Lon),
+			).Inc()
+
+			if q.Reason == "FilteredBlackList" ||
+				q.Reason == "FilteredSafeBrowsing" ||
+				q.Reason == "FilteredParental" {
+
+				blockedGeoQueries.WithLabelValues(
+					q.Client,
+					geo.Country,
+					fmt.Sprintf("%f", geo.Lat),
+					fmt.Sprintf("%f", geo.Lon),
+				).Inc()
+
+			}
+		}
+	}
+
+	logX(
+		"DEBUG",
+		"Processed %d querylog entries | GeoIP resolved: %d",
+		len(logData.Data),
+		geoResolved,
+	)
+}
+
+//cleanup memory
+func cleanupQueryCache() {
+
+	now := time.Now().Unix()
+
+	queryMutex.Lock()
+
+	for k, v := range querySeen {
+
+		if now-v > queryTTL {
+			delete(querySeen, k)
+		}
+
+	}
+
+	queryMutex.Unlock()
 }
 
 func main() {
@@ -622,17 +727,26 @@ func main() {
 
 	go func() {
 
-		for {
+        for {
 
-			updateStatsMetrics()
-		    updateStatusMetrics()
-			updateQueryLogMetrics()
+            start := time.Now()
 
-			time.Sleep(time.Duration(interval) * time.Second)
+            updateStatsMetrics()
+            updateStatusMetrics()
+            updateQueryLogMetrics()
 
-		}
+            cleanupQueryCache()
 
-	}()
+            duration := time.Since(start).Seconds()
+
+            exporterScrapeDuration.Set(duration)
+            exporterUp.Set(1)
+
+            time.Sleep(time.Duration(interval) * time.Second)
+
+        }
+
+    }()
 
 	http.Handle("/metrics", promhttp.Handler())
 
