@@ -399,7 +399,10 @@ func fetchQueryLog() (*AdGuardQueryLog, error) {
             }
         }()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, err
+    }
 
 	var logData AdGuardQueryLog
 
@@ -433,7 +436,10 @@ func fetchStats() (*AdGuardStats, error) {
 		}
 	}()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, err
+    }
 
 	var stats AdGuardStats
 
@@ -467,7 +473,10 @@ func fetchStatus() (*AdGuardStatus, error) {
 		}
 	}()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, err
+    }
 
 	var status AdGuardStatus
 
@@ -585,7 +594,10 @@ func updateStatusMetrics() {
 }
 
 func updateQueryLogMetrics() {
-
+    
+    scanned := 0
+    processed := 0
+    skipped := 0
 	geoResolved := 0
 
 	logData, err := fetchQueryLog()
@@ -596,6 +608,8 @@ func updateQueryLogMetrics() {
 	}
 
 	for _, q := range logData.Data {
+
+		scanned++
 
 		// dedup logic
 		key := buildQueryKey(
@@ -614,6 +628,7 @@ func updateQueryLogMetrics() {
 
 			if now-ts < queryTTL {
 				queryMutex.Unlock()
+				skipped++
 				continue
 			}
 
@@ -621,6 +636,8 @@ func updateQueryLogMetrics() {
 
 		querySeen[key] = now
 		queryMutex.Unlock()
+		
+		processed++
 
 		queryCountByReason.WithLabelValues(q.Reason).Inc()
 		queryCountByType.WithLabelValues(q.Question.Type).Inc()
@@ -671,8 +688,10 @@ func updateQueryLogMetrics() {
 
 	logX(
 		"DEBUG",
-		"Processed %d querylog entries | GeoIP resolved: %d",
-		len(logData.Data),
+		"Querylog: scanned=%d new=%d skipped=%d geoip=%d",
+		scanned,
+        processed,
+        skipped,
 		geoResolved,
 	)
 }
@@ -724,6 +743,8 @@ func main() {
 	if err != nil || interval < 1 {
 		interval = 15
 	}
+    
+    logX("INFO", "Scrape interval set to %ds", interval)
 
 	go func() {
 
@@ -741,6 +762,8 @@ func main() {
 
             exporterScrapeDuration.Set(duration)
             exporterUp.Set(1)
+
+			logX("DEBUG", "Scrape finished in %.3fs", duration)
 
             time.Sleep(time.Duration(interval) * time.Second)
 
