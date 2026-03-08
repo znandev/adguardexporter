@@ -624,6 +624,7 @@ func updateQueryLogMetrics() {
     processed := 0
     skipped := 0
 	geoResolved := 0
+	dedupHits := 0
 
 	logData, err := fetchQueryLog()
 
