@@ -70,7 +70,8 @@ After that, you should got the output like this:
 ## Environment Variables
 
 | Variable         | Description                            | Required | Example                      |
-|------------------|----------------------------   | `http://192.168.1.1:3000`    |
+|------------------|----------------------------   | -------------------|-------------------
+| `ADGUARD_HOST`| AdGuard Home base URL            | ✅ |  `http://192.168.1.1:3000,`    |
 | `ADGUARD_USER`| AdGuard Home username                 | ✅       | `admin`                      |
 | `ADGUARD_PASS`| AdGuard Home password                 | ✅       | `secretpassword`             |
 | `EXPORTER_PORT`   | Port to expose metrics (default: 9617) | ❌       | `9200`                       |
