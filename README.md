@@ -6,24 +6,55 @@ A lightweight Prometheus exporter written in Go that exposes detailed metrics fr
 
 ## Features
 
-- Authenticated access to AdGuard Home API
-- Prometheus-compatible metrics exporter
-- Rich DNS analytics:
-  - total queries
-  - blocked queries
-  - upstream DNS statistics
-  - per-client query statistics
-- Query log analysis from AdGuard Home
-- GeoIP enrichment using MaxMind GeoLite2 database
-- Geographic DNS client visualization (Grafana Geomap)
-- DNS threat map for blocked queries
-- Supported endpoints:
-  - `/control/status`
-  - `/control/stats`
-  - `/control/querylog`
-- Customizable scrape interval
-- Lightweight single binary
-- Docker-friendly deployment
+* Authenticated access to AdGuard Home API
+* Prometheus-compatible metrics exporter
+
+#### DNS Analytics
+
+* Total DNS queries
+* Blocked DNS queries
+* Upstream DNS statistics
+* Per-client query statistics
+* Query reason statistics
+* DNS query latency histograms
+
+#### Query Log Analysis
+
+* Real-time query log processing
+* Query deduplication to prevent metric inflation
+* Query reason and domain tracking
+
+#### GeoIP Enrichment
+
+* GeoIP lookup using MaxMind GeoLite2 database
+* DNS client geographic visualization (Grafana Geomap)
+* DNS threat map for blocked queries
+* GeoIP caching for improved performance
+
+#### ISP Traffic Analytics
+
+* DNS queries grouped by ISP organization
+* Country-level DNS traffic insights
+* ISP-based DNS traffic monitoring
+
+#### Exporter Self-Monitoring
+
+* Query deduplication cache size monitoring
+* GeoIP cache usage monitoring
+* Deduplication hit counters
+* Exporter scrape performance metrics
+
+#### Supported AdGuard API Endpoints
+
+* `/control/status`
+* `/control/stats`
+* `/control/querylog`
+
+#### Deployment
+
+* Customizable scrape interval
+* Lightweight single binary
+* Docker-friendly deployment
 
 ---
 
@@ -290,22 +321,13 @@ adguard_blocked_geo_queries{client="118.99.94.204",country="ID",lat="-2.969000",
 
 Metrics used to monitor the exporter itself.
 
-* `adguard_exporter_up`
-  Indicates if the exporter successfully scraped the AdGuard API.
-
-* `adguard_exporter_scrape_duration_seconds`
-  Time taken for the exporter to scrape AdGuard API data.
-
-* `adguard_exporter_scrape_errors_total`
-  Total number of errors encountered during scraping.
-
-Example:
-
-```
-adguard_exporter_up 1
-adguard_exporter_scrape_duration_seconds 0.032
-adguard_exporter_scrape_errors_total 0
-```
+* `adguard_exporter_up` — Indicates if the exporter successfully scraped the AdGuard API.
+* `adguard_exporter_scrape_duration_seconds` — Time taken for the exporter to scrape AdGuard API data.
+* `adguard_exporter_scrape_errors_total` — Total number of errors encountered during scraping.
+* `adguard_exporter_query_cache_size` — Number of cached DNS query entries used for deduplication.
+* `adguard_exporter_geo_cache_size` — Number of cached GeoIP lookup entries.
+* `adguard_exporter_dedup_hits_total` — Total number of duplicate DNS queries skipped by the exporter.
+  
 ---
 
 ## License
