@@ -424,7 +424,10 @@ func fetchQueryLog() (*AdGuardQueryLog, error) {
             }
         }()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, err
+    }
 
 	var logData AdGuardQueryLog
 
@@ -458,7 +461,10 @@ func fetchStats() (*AdGuardStats, error) {
 		}
 	}()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, err
+    }
 
 	var stats AdGuardStats
 
@@ -492,7 +498,10 @@ func fetchStatus() (*AdGuardStatus, error) {
 		}
 	}()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, err
+    }
 
 	var status AdGuardStatus
 
@@ -610,7 +619,10 @@ func updateStatusMetrics() {
 }
 
 func updateQueryLogMetrics() {
-
+    
+    scanned := 0
+    processed := 0
+    skipped := 0
 	geoResolved := 0
 	processed := 0
 	skipped := 0
@@ -624,6 +636,8 @@ func updateQueryLogMetrics() {
 	}
 
 	for _, q := range logData.Data {
+
+		scanned++
 
 		// dedup logic
 		key := buildQueryKey(
@@ -652,6 +666,8 @@ func updateQueryLogMetrics() {
 
 		querySeen[key] = now
 		queryMutex.Unlock()
+		
+		processed++
 
 		processed++
 		
@@ -758,6 +774,8 @@ func main() {
 	if err != nil || interval < 1 {
 		interval = 15
 	}
+    
+    logX("INFO", "Scrape interval set to %ds", interval)
 
 	go func() {
 
