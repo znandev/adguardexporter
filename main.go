@@ -619,13 +619,11 @@ func updateStatusMetrics() {
 }
 
 func updateQueryLogMetrics() {
-    
-    scanned := 0
-    processed := 0
-    skipped := 0
+
 	geoResolved := 0
 	processed := 0
 	skipped := 0
+	geoResolved := 0
 	dedupHits := 0
 
 	logData, err := fetchQueryLog()
@@ -639,7 +637,8 @@ func updateQueryLogMetrics() {
 
 		scanned++
 
-		// dedup logic
+		scanned++
+
 		key := buildQueryKey(
 			q.Client,
 			q.Question.Name,
@@ -653,7 +652,6 @@ func updateQueryLogMetrics() {
 		queryMutex.Lock()
 
 		if ts, exists := querySeen[key]; exists {
-
 			if now-ts < queryTTL {
 				queryMutex.Unlock()
 				skipped++
@@ -661,7 +659,6 @@ func updateQueryLogMetrics() {
 				dedupHits++
 				continue
 			}
-
 		}
 
 		querySeen[key] = now
@@ -670,7 +667,7 @@ func updateQueryLogMetrics() {
 		processed++
 
 		processed++
-		
+
 		queryCountByReason.WithLabelValues(q.Reason).Inc()
 		queryCountByType.WithLabelValues(q.Question.Type).Inc()
 
@@ -683,7 +680,6 @@ func updateQueryLogMetrics() {
 			if q.Upstream != "" {
 				upstreamLatencyHistogram.WithLabelValues(q.Upstream).Observe(elapsedMs / 1000)
 			}
-
 		}
 
 		queryCountByUpstream.WithLabelValues(q.Upstream).Inc()
@@ -704,8 +700,8 @@ func updateQueryLogMetrics() {
 			).Inc()
 
 			if q.Reason == "FilteredBlackList" ||
-			   q.Reason == "FilteredSafeBrowsing" ||
-			   q.Reason == "FilteredParental" {
+				q.Reason == "FilteredSafeBrowsing" ||
+				q.Reason == "FilteredParental" {
 
 				blockedGeoQueries.WithLabelValues(
 					q.Client,
@@ -713,18 +709,18 @@ func updateQueryLogMetrics() {
 					fmt.Sprintf("%f", geo.Lat),
 					fmt.Sprintf("%f", geo.Lon),
 				).Inc()
-
 			}
 		}
 	}
 
 	logX("DEBUG",
-	    "Querylog: scanned=%d new=%d skipped=%d geoip=%d",
-	    len(logData.Data),
-	    processed,
-	    skipped,
-	    geoResolved,
-    )
+		"Querylog: scanned=%d new=%d skipped=%d geoip=%d dedupHits=%d",
+		scanned,
+		processed,
+		skipped,
+		geoResolved,
+		dedupHits,
+	)
 }
 
 //cleanup memory
