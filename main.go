@@ -612,6 +612,9 @@ func updateStatusMetrics() {
 func updateQueryLogMetrics() {
 
 	geoResolved := 0
+	processed := 0
+	skipped := 0
+	dedupHits := 0
 
 	logData, err := fetchQueryLog()
 
@@ -639,12 +642,9 @@ func updateQueryLogMetrics() {
 
 			if now-ts < queryTTL {
 				queryMutex.Unlock()
-<<<<<<< HEAD
-=======
 				skipped++
 				exporterDedupHits.Inc()
 				dedupHits++
->>>>>>> f5d184e (feat(exporter): add self-monitoring metrics and improve debug logging)
 				continue
 			}
 
@@ -652,12 +652,9 @@ func updateQueryLogMetrics() {
 
 		querySeen[key] = now
 		queryMutex.Unlock()
-<<<<<<< HEAD
-=======
 
 		processed++
->>>>>>> f5d184e (feat(exporter): add self-monitoring metrics and improve debug logging)
-
+		
 		queryCountByReason.WithLabelValues(q.Reason).Inc()
 		queryCountByType.WithLabelValues(q.Question.Type).Inc()
 
@@ -691,8 +688,8 @@ func updateQueryLogMetrics() {
 			).Inc()
 
 			if q.Reason == "FilteredBlackList" ||
-				q.Reason == "FilteredSafeBrowsing" ||
-				q.Reason == "FilteredParental" {
+			   q.Reason == "FilteredSafeBrowsing" ||
+			   q.Reason == "FilteredParental" {
 
 				blockedGeoQueries.WithLabelValues(
 					q.Client,
@@ -705,12 +702,13 @@ func updateQueryLogMetrics() {
 		}
 	}
 
-	logX(
-		"DEBUG",
-		"Processed %d querylog entries | GeoIP resolved: %d",
-		len(logData.Data),
-		geoResolved,
-	)
+	logX("DEBUG",
+	    "Querylog: scanned=%d new=%d skipped=%d geoip=%d",
+	    len(logData.Data),
+	    processed,
+	    skipped,
+	    geoResolved,
+    )
 }
 
 //cleanup memory
