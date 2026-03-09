@@ -39,7 +39,7 @@ A lightweight Prometheus exporter written in Go that exposes detailed metrics fr
 Before running this exporter, make sure:
 
 - AdGuard Home is up and running
-- You have a valid AdGuard username & password (without special character)
+- You have a valid AdGuard username & password (without special character (!,@,`,* etc.))
 - Prometheus is configured to scrape this exporter
 - Docker installed (or alternatively Go 1.20+ for building from source)
 - Port `9617` is available on your system
@@ -321,10 +321,15 @@ Grafana Dashboard Preview
 [Live preview and monitoring, click here](https://stats.znand.my.id/public-dashboards/a0b05deb37464a17b01cbc69eb65ac5a?orgId=1&refresh=5s)
 
 [Deploy yours here](https://grafana.com/grafana/dashboards/23579-adguard-metrics-statistics/)
+— new dashboard.json for grafana will be uploaded soon
 
 ![dashboard1](./grafana/dashboard1.png)
 
 ![dashboard2](./grafana/dashboard2.png)
+
+![dashboard3](./grafana/dashboard3.png)
+
+![dashboard4](./grafana/dashboard4.png)
 ---
 
 ## 💬 Feedback
