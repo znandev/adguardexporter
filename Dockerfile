@@ -14,7 +14,7 @@ ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -ldflags="-s -w" -o adguard-exporter .
 
-FROM alpine:3.20 AS certs
+FROM alpine:3.23 AS certs
 RUN apk add --no-cache ca-certificates
 
 FROM scratch
