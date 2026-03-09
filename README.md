@@ -6,25 +6,15 @@ A lightweight Prometheus exporter written in Go that exposes detailed metrics fr
 
 ## Features
 
-- Authenticated access to AdGuard Home API
-- Prometheus-compatible metrics exporter
-- Rich DNS analytics:
-  - total queries
-  - blocked queries
-  - upstream DNS statistics
-  - per-client query statistics
-- Query log analysis from AdGuard Home
-- GeoIP enrichment using MaxMind GeoLite2 database
-- Geographic DNS client visualization (Grafana Geomap)
-- DNS threat map for blocked queries
-- Supported endpoints:
-  - `/control/status`
-  - `/control/stats`
-  - `/control/querylog`
-- Customizable scrape interval
-- Lightweight single binary
-- Docker-friendly deployment
-
+| Category | Capabilities |
+|----------|--------------|
+| API Integration | • Authenticated access to AdGuard Home API<br>• Supports `/control/status`, `/control/stats`, and `/control/querylog` endpoints |
+| DNS Analytics | • Total DNS queries metrics<br>• Blocked DNS queries tracking<br>• Upstream DNS statistics<br>• Per-client query statistics<br>• Query reason statistics<br>• DNS upstream latency histograms |
+| Query Log Processing | • Real-time query log analysis<br>• Query deduplication to prevent metric inflation<br>• Domain and query reason tracking |
+| GeoIP Enrichment | • MaxMind GeoLite2 IP geolocation lookup<br>• DNS client geographic visualization (Grafana Geomap)<br>• DNS threat map for blocked queries<br>• GeoIP caching for improved performance |
+| Traffic Analytics | • DNS queries grouped by ISP organization<br>• Country-level DNS traffic insights<br>• ISP-based DNS traffic monitoring |
+| Exporter Monitoring | • Deduplication cache metrics<br>• GeoIP cache usage monitoring<br>• Deduplication hit counters<br>• Exporter scrape performance metrics |
+| Deployment | • Customizable scrape interval<br>• Lightweight single binary deployment<br>• Docker-friendly deployment |
 ---
 
 ## Built With
@@ -80,8 +70,8 @@ After that, you should got the output like this:
 ## Environment Variables
 
 | Variable         | Description                            | Required | Example                      |
-|------------------|----------------------------------------|----------|------------------------------|
-| `ADGUARD_HOST`     | URL to your AdGuard Home API          | ✅       | `http://192.168.1.1:3000`    |
+|------------------|----------------------------   | -------------------|-------------------
+| `ADGUARD_HOST`| AdGuard Home base URL            | ✅ |  `http://192.168.1.1:3000,`    |
 | `ADGUARD_USER`| AdGuard Home username                 | ✅       | `admin`                      |
 | `ADGUARD_PASS`| AdGuard Home password                 | ✅       | `secretpassword`             |
 | `EXPORTER_PORT`   | Port to expose metrics (default: 9617) | ❌       | `9200`                       |
@@ -290,22 +280,13 @@ adguard_blocked_geo_queries{client="118.99.94.204",country="ID",lat="-2.969000",
 
 Metrics used to monitor the exporter itself.
 
-* `adguard_exporter_up`
-  Indicates if the exporter successfully scraped the AdGuard API.
-
-* `adguard_exporter_scrape_duration_seconds`
-  Time taken for the exporter to scrape AdGuard API data.
-
-* `adguard_exporter_scrape_errors_total`
-  Total number of errors encountered during scraping.
-
-Example:
-
-```
-adguard_exporter_up 1
-adguard_exporter_scrape_duration_seconds 0.032
-adguard_exporter_scrape_errors_total 0
-```
+* `adguard_exporter_up` — Indicates if the exporter successfully scraped the AdGuard API.
+* `adguard_exporter_scrape_duration_seconds` — Time taken for the exporter to scrape AdGuard API data.
+* `adguard_exporter_scrape_errors_total` — Total number of errors encountered during scraping.
+* `adguard_exporter_query_cache_size` — Number of cached DNS query entries used for deduplication.
+* `adguard_exporter_geo_cache_size` — Number of cached GeoIP lookup entries.
+* `adguard_exporter_dedup_hits_total` — Total number of duplicate DNS queries skipped by the exporter.
+  
 ---
 
 ## License
