@@ -10,3 +10,4 @@ dist/
 
 #db
 GeoLite2-City.mmdb
+geolite2-db/GeoLite2-City.mmdb

@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  adguard-exporter:
+    image: ghcr.io/znand-dev/adguardexporter:latest
+    container_name: adguard_exporter
+    restart: unless-stopped
+
+    ports:
+      - "9617:9617"
+
+    volumes:
+      - ./<path/to/your>/GeoLite2-City.mmdb:/GeoLite2-City.mmdb # your geolite2 db file
+
+    environment:
+      - ADGUARD_HOST=<ADGUARD_URL> # try docker ips if didn't works http://172.xx.x.x for example
+      - ADGUARD_USER=<ADGUARD_USERNAME> # required
+      - ADGUARD_PASS=<ADGUARD_PASSWORD> # required
+      - EXPORTER_PORT=9200 # optional, default 9617
+      - SCRAPE_INTERVAL=15s # optional
+      - LOG_LEVEL=DEBUG # optional

@@ -1,25 +1,31 @@
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 WORKDIR /app
 
-# Tambahkan tools build
 RUN apk add --no-cache ca-certificates git
 
-# Copy semua source code ke container
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
 
-# Build biner static
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o adguard-exporter .
+ARG TARGETOS
+ARG TARGETARCH
 
-# Tahap ambil certs
-FROM --platform=$BUILDPLATFORM alpine:3.23.3 AS certs
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -ldflags="-s -w" -o adguard-exporter .
+
+FROM alpine:3.20 AS certs
 RUN apk add --no-cache ca-certificates
 
-# Final image
 FROM scratch
 WORKDIR /
 
 COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /app/adguard-exporter /adguard-exporter
+COPY --from=build /app/GeoLite2-City.mmdb /GeoLite2-City.mmdb
+
 USER 65532:65532
+
+EXPOSE 9200
 
 ENTRYPOINT ["/adguard-exporter"]
