@@ -288,13 +288,16 @@ Grafana Dashboard Preview
 [Deploy yours here](https://grafana.com/grafana/dashboards/23579-adguard-metrics-statistics/)
 — new dashboard.json for grafana will be uploaded soon
 
-![dashboard1](./grafana/dashboard1.png)
+![dashboard1](./grafana/dashboard01.png)
 
-![dashboard2](./grafana/dashboard2.png)
+![dashboard2](./grafana/dashboard02.png)
 
-![dashboard3](./grafana/dashboard3.png)
+![dashboard3](./grafana/dashboard03.png)
 
-![dashboard4](./grafana/dashboard4.png)
+![dashboard4](./grafana/dashboard04.png)
+
+![dashboard5](./grafana/dashboard06.png)
+
 ---
 
 ## 💬 Feedback
