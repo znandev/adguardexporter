@@ -91,7 +91,7 @@ version: '3.8'
 
 services:
   adguard-exporter:
-    image: ghcr.io/znand-dev/adguardexporter:latest
+    image: ghcr.io/znandev/adguardexporter:latest
     container_name: adguard_exporter
     restart: unless-stopped
     ports:
