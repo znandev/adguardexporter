@@ -378,6 +378,9 @@ func init() {
 }
 
 func resolveGeo(ipStr string) (GeoCache, bool) {
+	if geoDB == nil {
+		return GeoCache{}, false
+	}
 
 	ip := net.ParseIP(ipStr)
 	if ip == nil || ip.IsPrivate() || ip.IsLoopback() {
@@ -786,11 +789,11 @@ func main() {
 	db, err := geoip2.Open(dbPath)
 
 	if err != nil {
-		log.Fatalf("Failed open GeoIP DB: %v", err)
+		logX("WARN", "GeoIP DB not found (%v) — geo metrics disabled", err)
+	} else {
+		geoDB = db
+		logX("INFO", "GeoIP database loaded")
 	}
-
-	geoDB = db
-	logX("INFO", "GeoIP database loaded")
 
 	scrapeIntervalStr := os.Getenv("SCRAPE_INTERVAL")
 	port := os.Getenv("EXPORTER_PORT")
