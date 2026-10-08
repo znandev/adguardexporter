@@ -7,6 +7,7 @@ toolchain go1.27.1
 require (
 	github.com/joho/godotenv v1.5.1
 	github.com/oschwald/geoip2-golang v1.13.0
+	github.com/oschwald/geoip2-golang/v2 v2.4.0
 	github.com/prometheus/client_golang v1.25.0
 )
 
