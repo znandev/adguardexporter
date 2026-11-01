@@ -15,7 +15,14 @@ services:
     environment:
       - ADGUARD_HOST=<ADGUARD_URL> # try docker ips if didn't works http://172.xx.x.x for example
       - ADGUARD_USER=<ADGUARD_USERNAME> # required
-      - ADGUARD_PASS=<ADGUARD_PASSWORD> # required
+      - ADGUARD_PASS_FILE=/run/secrets/adguard_pass # required
       - EXPORTER_PORT=9200 # optional, default 9617
       - SCRAPE_INTERVAL=15 # optional
       - LOG_LEVEL=DEBUG # optional
+
+    secrets:
+      - adguard_pass
+
+secrets:
+  adguard_pass:
+    file: ./secrets/adguard_pass

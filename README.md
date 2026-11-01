@@ -15,6 +15,7 @@ A lightweight Prometheus exporter written in Go that exposes detailed metrics fr
 | Traffic Analytics | • DNS queries grouped by ISP organization<br>• Country-level DNS traffic insights<br>• ISP-based DNS traffic monitoring |
 | Exporter Monitoring | • Deduplication cache metrics<br>• GeoIP cache usage monitoring<br>• Deduplication hit counters<br>• Exporter scrape performance metrics |
 | Deployment | • Customizable scrape interval<br>• Lightweight single binary deployment<br>• Docker-friendly deployment |
+
 ---
 
 ## Built With
@@ -24,6 +25,7 @@ A lightweight Prometheus exporter written in Go that exposes detailed metrics fr
 - [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome)
 
 ---
+
 ## Prerequisites
 
 Before running this exporter, make sure:
@@ -66,25 +68,29 @@ After that, you should got the output like this:
 
 ---
 
----
 ## Environment Variables
 
 | Variable         | Description                            | Required | Example                      |
 |------------------|----------------------------   | -------------------|-------------------
 | `ADGUARD_HOST`| AdGuard Home base URL            | ✅ |  `http://192.168.1.1:3000,`    |
 | `ADGUARD_USER`| AdGuard Home username                 | ✅       | `admin`                      |
-| `ADGUARD_PASS`| AdGuard Home password                 | ✅       | `secretpassword`             |
+| `ADGUARD_PASS`| AdGuard Home password (used when `ADGUARD_PASS_FILE` is unset) | One of `ADGUARD_PASS` or `ADGUARD_PASS_FILE` | `secretpassword` |
+| `ADGUARD_PASS_FILE` | Path to a file containing the AdGuard Home password (takes precedence over `ADGUARD_PASS`) | One of `ADGUARD_PASS` or `ADGUARD_PASS_FILE` | `/run/secrets/adguard_pass` |
 | `EXPORTER_PORT`   | Port to expose metrics (default: 9617) | ❌       | `9200`                       |
 | `SCRAPE_INTERVAL` | How often to scrape (default: `15` for 15s)    | ❌       | `30`                        |
 | `LOG_LEVEL`       | Log Level to analyze, INFO, WARN, DEBUG | ❌      | `DEBUG`,`WARN`,`INFO`        |
 
 ---
 
-### Quick Start
+## Quick Start
 
-## Run via Docker Compose
+Run via Docker Compose
+
+---
 
 ### 1. Create docker-compose.yml in your root dir
+
+#### Without `secret`
 
 ```yaml
 version: '3.8'
@@ -99,13 +105,46 @@ services:
     volumes:
       - ./<path/to/your>/GeoLite2-City.mmdb:/GeoLite2-City.mmdb
     environment:
-      - ADGUARD_HOST=<YOUR_ADGUARD_URL>
-      - ADGUARD_USER=<YOUR_ADGUARD_USERNAME>
-      - ADGUARD_PASS=<YOUR_ADGUARD_PASSWORD>
-      - EXPORTER_PORT=9617
-      - SCRAPE_INTERVAL=15
-      - LOG_LEVEL=DEBUG
+      ADGUARD_HOST: <YOUR_ADGUARD_URL>
+      ADGUARD_USER: <YOUR_ADGUARD_USERNAME>
+      ADGUARD_PASS: <YOUR_ADGUARD_PASSWORD>
+      EXPORTER_PORT: 9617
+      SCRAPE_INTERVAL: 15s
+      LOG_LEVEL: DEBUG
 ```
+
+#### With `secret`
+
+```yaml
+version: '3.8'
+
+services:
+  adguard-exporter:
+    image: ghcr.io/znandev/adguardexporter:latest
+    container_name: adguard_exporter
+    restart: unless-stopped
+    ports:
+      - "9617:9617"
+    volumes:
+      - ./<path/to/your>/GeoLite2-City.mmdb:/GeoLite2-City.mmdb
+    environment:
+      ADGUARD_HOST: <YOUR_ADGUARD_URL>
+      ADGUARD_USER: <YOUR_ADGUARD_USERNAME>
+      ADGUARD_PASS_FILE: /run/secrets/adguard_pass
+      EXPORTER_PORT: 9617
+      SCRAPE_INTERVAL: 15s
+      LOG_LEVEL: DEBUG
+    secrets:
+      - adguard_pass
+
+secrets:
+  adguard_pass:
+    file: ./secrets/adguard_pass
+```
+
+Create `./secrets/adguard_pass` with the AdGuard password. The file is mounted into the container as a Docker secret; any trailing newline is ignored. To keep using an environment variable instead, set `ADGUARD_PASS` and remove `ADGUARD_PASS_FILE` and the Compose secret configuration.
+
+---
 
 ### 2. Run with Docker Compose
 
