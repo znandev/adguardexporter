@@ -1,0 +1,146 @@
+# HELP adguard_avg_processing_time Avg DNS processing time
+# TYPE adguard_avg_processing_time gauge
+adguard_avg_processing_time 0.0123
+# HELP adguard_blocked_filtering_total Total DNS queries blocked
+# TYPE adguard_blocked_filtering_total gauge
+adguard_blocked_filtering_total 56
+# HELP adguard_dhcp_available DHCP available
+# TYPE adguard_dhcp_available gauge
+adguard_dhcp_available 0
+# HELP adguard_dns_queries_total Total DNS queries received
+# TYPE adguard_dns_queries_total gauge
+adguard_dns_queries_total 1234
+# HELP adguard_exporter_dedup_hits_total Total number of duplicate queries skipped by deduplication
+# TYPE adguard_exporter_dedup_hits_total counter
+adguard_exporter_dedup_hits_total 0
+# HELP adguard_exporter_geo_cache_size Current number of cached GeoIP entries
+# TYPE adguard_exporter_geo_cache_size gauge
+adguard_exporter_geo_cache_size 0
+# HELP adguard_exporter_query_cache_size Current number of entries in query deduplication cache
+# TYPE adguard_exporter_query_cache_size gauge
+adguard_exporter_query_cache_size 6
+# HELP adguard_exporter_scrape_errors_total Total exporter errors
+# TYPE adguard_exporter_scrape_errors_total counter
+adguard_exporter_scrape_errors_total 0
+# HELP adguard_exporter_up Exporter scrape success
+# TYPE adguard_exporter_up gauge
+adguard_exporter_up 1
+# HELP adguard_protection_disabled_duration_seconds Time since protection disabled
+# TYPE adguard_protection_disabled_duration_seconds gauge
+adguard_protection_disabled_duration_seconds 0
+# HELP adguard_protection_enabled Protection enabled (1/0)
+# TYPE adguard_protection_enabled gauge
+adguard_protection_enabled 1
+# HELP adguard_query_client_reason_total Queries per client per reason
+# TYPE adguard_query_client_reason_total counter
+adguard_query_client_reason_total{client="127.0.0.1",reason="Rewrite"} 1
+adguard_query_client_reason_total{client="192.168.1.10",reason="FilteredBlackList"} 1
+adguard_query_client_reason_total{client="192.168.1.10",reason="NotFilteredNotFound"} 1
+adguard_query_client_reason_total{client="198.51.100.20",reason="NotFilteredNotFound"} 1
+adguard_query_client_reason_total{client="203.0.113.7",reason="FilteredBlackList"} 1
+adguard_query_client_reason_total{client="203.0.113.7",reason="NotFilteredNotFound"} 1
+# HELP adguard_query_domain_total Queries per domain
+# TYPE adguard_query_domain_total counter
+adguard_query_domain_total{domain="ads.example"} 1
+adguard_query_domain_total{domain="example.com"} 2
+adguard_query_domain_total{domain="example.org"} 1
+adguard_query_domain_total{domain="localhost.example"} 1
+adguard_query_domain_total{domain="tracker.example"} 1
+# HELP adguard_query_elapsed_ms Query duration by client
+# TYPE adguard_query_elapsed_ms histogram
+adguard_query_elapsed_ms_bucket{client="127.0.0.1",le="1"} 1
+adguard_query_elapsed_ms_bucket{client="127.0.0.1",le="6"} 1
+adguard_query_elapsed_ms_bucket{client="127.0.0.1",le="11"} 1
+adguard_query_elapsed_ms_bucket{client="127.0.0.1",le="16"} 1
+adguard_query_elapsed_ms_bucket{client="127.0.0.1",le="21"} 1
+adguard_query_elapsed_ms_bucket{client="127.0.0.1",le="26"} 1
+adguard_query_elapsed_ms_bucket{client="127.0.0.1",le="31"} 1
+adguard_query_elapsed_ms_bucket{client="127.0.0.1",le="36"} 1
+adguard_query_elapsed_ms_bucket{client="127.0.0.1",le="41"} 1
+adguard_query_elapsed_ms_bucket{client="127.0.0.1",le="46"} 1
+adguard_query_elapsed_ms_bucket{client="127.0.0.1",le="+Inf"} 1
+adguard_query_elapsed_ms_sum{client="127.0.0.1"} 0.05
+adguard_query_elapsed_ms_count{client="127.0.0.1"} 1
+adguard_query_elapsed_ms_bucket{client="192.168.1.10",le="1"} 1
+adguard_query_elapsed_ms_bucket{client="192.168.1.10",le="6"} 2
+adguard_query_elapsed_ms_bucket{client="192.168.1.10",le="11"} 2
+adguard_query_elapsed_ms_bucket{client="192.168.1.10",le="16"} 2
+adguard_query_elapsed_ms_bucket{client="192.168.1.10",le="21"} 2
+adguard_query_elapsed_ms_bucket{client="192.168.1.10",le="26"} 2
+adguard_query_elapsed_ms_bucket{client="192.168.1.10",le="31"} 2
+adguard_query_elapsed_ms_bucket{client="192.168.1.10",le="36"} 2
+adguard_query_elapsed_ms_bucket{client="192.168.1.10",le="41"} 2
+adguard_query_elapsed_ms_bucket{client="192.168.1.10",le="46"} 2
+adguard_query_elapsed_ms_bucket{client="192.168.1.10",le="+Inf"} 2
+adguard_query_elapsed_ms_sum{client="192.168.1.10"} 3.3000000000000003
+adguard_query_elapsed_ms_count{client="192.168.1.10"} 2
+adguard_query_elapsed_ms_bucket{client="203.0.113.7",le="1"} 1
+adguard_query_elapsed_ms_bucket{client="203.0.113.7",le="6"} 1
+adguard_query_elapsed_ms_bucket{client="203.0.113.7",le="11"} 1
+adguard_query_elapsed_ms_bucket{client="203.0.113.7",le="16"} 2
+adguard_query_elapsed_ms_bucket{client="203.0.113.7",le="21"} 2
+adguard_query_elapsed_ms_bucket{client="203.0.113.7",le="26"} 2
+adguard_query_elapsed_ms_bucket{client="203.0.113.7",le="31"} 2
+adguard_query_elapsed_ms_bucket{client="203.0.113.7",le="36"} 2
+adguard_query_elapsed_ms_bucket{client="203.0.113.7",le="41"} 2
+adguard_query_elapsed_ms_bucket{client="203.0.113.7",le="46"} 2
+adguard_query_elapsed_ms_bucket{client="203.0.113.7",le="+Inf"} 2
+adguard_query_elapsed_ms_sum{client="203.0.113.7"} 12.7
+adguard_query_elapsed_ms_count{client="203.0.113.7"} 2
+# HELP adguard_query_isp_total DNS queries grouped by ISP organization
+# TYPE adguard_query_isp_total counter
+adguard_query_isp_total{country="DE",isp="Example ISP"} 2
+# HELP adguard_query_reason_total Queries by reason
+# TYPE adguard_query_reason_total counter
+adguard_query_reason_total{reason="FilteredBlackList"} 2
+adguard_query_reason_total{reason="NotFilteredNotFound"} 3
+adguard_query_reason_total{reason="Rewrite"} 1
+# HELP adguard_query_type_total Queries by DNS type
+# TYPE adguard_query_type_total counter
+adguard_query_type_total{type="A"} 4
+adguard_query_type_total{type="AAAA"} 1
+adguard_query_type_total{type="HTTPS"} 1
+# HELP adguard_query_upstream_total Queries per upstream
+# TYPE adguard_query_upstream_total counter
+adguard_query_upstream_total{upstream=""} 3
+adguard_query_upstream_total{upstream="https://dns.quad9.net:443/dns-query"} 3
+# HELP adguard_replaced_parental Total parental replaced queries
+# TYPE adguard_replaced_parental gauge
+adguard_replaced_parental 7
+# HELP adguard_running AdGuard running
+# TYPE adguard_running gauge
+adguard_running 1
+# HELP adguard_top_blocked_domain_total Top blocked domains
+# TYPE adguard_top_blocked_domain_total gauge
+adguard_top_blocked_domain_total{domain="ads.example"} 20
+# HELP adguard_top_client_total Top client IPs
+# TYPE adguard_top_client_total gauge
+adguard_top_client_total{client="192.168.1.10"} 300
+# HELP adguard_top_queried_domain_total Top queried domains
+# TYPE adguard_top_queried_domain_total gauge
+adguard_top_queried_domain_total{domain="example.com"} 100
+adguard_top_queried_domain_total{domain="example.org"} 50
+# HELP adguard_top_upstream_total Top upstream servers
+# TYPE adguard_top_upstream_total gauge
+adguard_top_upstream_total{upstream="https://dns.quad9.net:443/dns-query"} 900
+# HELP adguard_upstream_avg_response_time_seconds Avg response time per upstream
+# TYPE adguard_upstream_avg_response_time_seconds gauge
+adguard_upstream_avg_response_time_seconds{upstream="https://dns.quad9.net:443/dns-query"} 0.021
+# HELP adguard_upstream_latency_seconds Latency distribution per upstream DNS server
+# TYPE adguard_upstream_latency_seconds histogram
+adguard_upstream_latency_seconds_bucket{upstream="https://dns.quad9.net:443/dns-query",le="0.001"} 0
+adguard_upstream_latency_seconds_bucket{upstream="https://dns.quad9.net:443/dns-query",le="0.002"} 0
+adguard_upstream_latency_seconds_bucket{upstream="https://dns.quad9.net:443/dns-query",le="0.004"} 1
+adguard_upstream_latency_seconds_bucket{upstream="https://dns.quad9.net:443/dns-query",le="0.008"} 1
+adguard_upstream_latency_seconds_bucket{upstream="https://dns.quad9.net:443/dns-query",le="0.016"} 2
+adguard_upstream_latency_seconds_bucket{upstream="https://dns.quad9.net:443/dns-query",le="0.032"} 2
+adguard_upstream_latency_seconds_bucket{upstream="https://dns.quad9.net:443/dns-query",le="0.064"} 2
+adguard_upstream_latency_seconds_bucket{upstream="https://dns.quad9.net:443/dns-query",le="0.128"} 2
+adguard_upstream_latency_seconds_bucket{upstream="https://dns.quad9.net:443/dns-query",le="0.256"} 2
+adguard_upstream_latency_seconds_bucket{upstream="https://dns.quad9.net:443/dns-query",le="0.512"} 2
+adguard_upstream_latency_seconds_bucket{upstream="https://dns.quad9.net:443/dns-query",le="+Inf"} 2
+adguard_upstream_latency_seconds_sum{upstream="https://dns.quad9.net:443/dns-query"} 0.015700000000000002
+adguard_upstream_latency_seconds_count{upstream="https://dns.quad9.net:443/dns-query"} 2
+# HELP adguard_version_info AdGuard version
+# TYPE adguard_version_info gauge
+adguard_version_info{version="v0.107.70"} 1

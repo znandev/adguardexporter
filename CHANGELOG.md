@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+### 🔄 Refactored
+- Split `main.go` into `internal/config`, `internal/adguard`, `internal/collector`, `internal/geo` and `internal/logx`; `main.go` only wires them. Metric names, labels, environment variables and log lines are unchanged.
+
+### 🛠 Fixed
+- An invalid `ADGUARD_HOST` logs an error instead of crashing the exporter
+- The DEBUG `dedupHits` log fields show the real count instead of always 0
+
+### 🧪 Tests
+- End-to-end tests run the exporter binary against a fake AdGuard Home API and compare `/metrics` with golden files in `testdata/` (`go test ./... -update` rewrites them)
+- Unit tests for every internal package
+
 ## v1.1.0 - 2025-06-18
 ### ✨ Added
 - `adguard_replaced_parental`: total queries replaced due to parental control
