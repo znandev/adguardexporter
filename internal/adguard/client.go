@@ -104,8 +104,7 @@ func (c *Client) QueryLog(ctx context.Context) (*QueryLog, error) {
 	return &v, c.get(ctx, "/control/querylog", &v)
 }
 
-// get decodes the body of path into v. Like before the restructuring, the
-// status code is not checked; an error page fails to decode.
+// get decodes the body of path into v. A status other than 200 is an error.
 func (c *Client) get(ctx context.Context, path string, v any) error {
 	pass, err := c.password()
 	if err != nil {
@@ -131,6 +130,9 @@ func (c *Client) get(ctx context.Context, path string, v any) error {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s: %s", path, resp.Status)
 	}
 
 	return json.Unmarshal(body, v)

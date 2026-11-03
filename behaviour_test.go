@@ -120,7 +120,7 @@ func TestGeoDBDefaultPath(t *testing.T) {
 	}
 }
 
-// All API calls fail. Today the exporter still reports itself as up.
+// All API calls fail: the exporter is down and counts one error per call.
 func TestGoldenAdGuardErrors(t *testing.T) {
 	fake := newFake(t)
 	for _, p := range []string{adguardtest.PathStats, adguardtest.PathStatus, adguardtest.PathQueryLog} {

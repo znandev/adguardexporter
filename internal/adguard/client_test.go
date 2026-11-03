@@ -3,6 +3,9 @@ package adguard
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,6 +81,17 @@ func TestErrors(t *testing.T) {
 	fake.Fail(adguardtest.PathStatus, 1)
 	if _, err := newClient(fake, fake.Pass()).Status(context.Background()); err == nil {
 		t.Error("no error on status 500")
+	}
+
+	// An error status is an error even if the body is valid JSON.
+	jsonErr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer jsonErr.Close()
+	if _, err := New(jsonErr.URL, "u", func() (string, error) { return "p", nil }).Stats(context.Background()); err == nil ||
+		!strings.Contains(err.Error(), "503") {
+		t.Errorf("err = %v, want the 503 status", err)
 	}
 
 	pwErr := errors.New("no password")

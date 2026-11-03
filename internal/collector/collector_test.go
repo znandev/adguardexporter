@@ -92,9 +92,17 @@ func TestStatsAndStatus(t *testing.T) {
 	if got := testutil.ToFloat64(c.m.dnsQueries); got != 100 {
 		t.Errorf("dns_queries = %v after a failed call, want 100", got)
 	}
-	// Today exporter_up is 1 regardless.
+	if got := testutil.ToFloat64(c.m.exporterUp); got != 0 {
+		t.Errorf("exporter_up = %v after a failed call, want 0", got)
+	}
+	if got := testutil.ToFloat64(c.m.exporterErrors); got != 1 {
+		t.Errorf("scrape_errors_total = %v, want 1", got)
+	}
+
+	api.statsErr = nil
+	c.RunOnce(context.Background())
 	if got := testutil.ToFloat64(c.m.exporterUp); got != 1 {
-		t.Errorf("exporter_up = %v", got)
+		t.Errorf("exporter_up = %v after recovery, want 1", got)
 	}
 }
 

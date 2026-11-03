@@ -64,20 +64,26 @@ func (c *Collector) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// RunOnce runs one loop: stats, status and query log.
+// RunOnce runs one loop: stats, status and query log. The exporter is up
+// only if every call of the loop succeeded; each failed call counts as one
+// scrape error.
 func (c *Collector) RunOnce(ctx context.Context) {
 	start := time.Now()
 
-	c.updateStats(ctx)
-	c.updateStatus(ctx)
-	c.updateQueryLog(ctx)
+	up := true
+	for _, update := range []func(context.Context) error{c.updateStats, c.updateStatus, c.updateQueryLog} {
+		if err := update(ctx); err != nil {
+			up = false
+			c.m.exporterErrors.Inc()
+		}
+	}
 
 	c.cleanupQueryCache()
 
 	duration := time.Since(start).Seconds()
 
 	c.m.exporterScrapeDuration.Set(duration)
-	c.m.exporterUp.Set(1)
+	c.m.exporterUp.Set(boolValue(up))
 
 	c.m.exporterQueryCacheSize.Set(float64(len(c.querySeen)))
 	c.m.exporterGeoCacheSize.Set(float64(c.geo.CacheSize()))
@@ -93,11 +99,11 @@ func (c *Collector) RunOnce(ctx context.Context) {
 	logx.Printf("DEBUG", "Scrape finished in %.3fs", duration)
 }
 
-func (c *Collector) updateStats(ctx context.Context) {
+func (c *Collector) updateStats(ctx context.Context) error {
 	stats, err := c.api.Stats(ctx)
 	if err != nil {
 		logx.Printf("ERROR", "Failed fetch stats: %v", err)
-		return
+		return err
 	}
 
 	c.m.dnsQueries.Set(stats.NumDNSQueries)
@@ -120,6 +126,8 @@ func (c *Collector) updateStats(ctx context.Context) {
 		stats.AvgProcessingTime,
 		len(stats.TopQueriedDomains),
 	)
+
+	return nil
 }
 
 // setTop replaces the series of a top list.
@@ -132,11 +140,11 @@ func setTop(g *prometheus.GaugeVec, top []map[string]float64) {
 	}
 }
 
-func (c *Collector) updateStatus(ctx context.Context) {
+func (c *Collector) updateStatus(ctx context.Context) error {
 	status, err := c.api.Status(ctx)
 	if err != nil {
 		logx.Printf("ERROR", "Failed fetch status: %v", err)
-		return
+		return err
 	}
 
 	c.m.statusRunning.Set(boolValue(status.Running))
@@ -154,6 +162,8 @@ func (c *Collector) updateStatus(ctx context.Context) {
 		status.DHCPAvailable,
 		status.Version,
 	)
+
+	return nil
 }
 
 func boolValue(b bool) float64 {
@@ -168,7 +178,7 @@ func queryKey(q *adguard.QueryLogEntry) string {
 	return q.Client + "|" + q.Question.Name + "|" + q.Upstream + "|" + q.Reason + "|" + q.Elapsed
 }
 
-func (c *Collector) updateQueryLog(ctx context.Context) {
+func (c *Collector) updateQueryLog(ctx context.Context) error {
 	scanned := 0
 	processed := 0
 	skipped := 0
@@ -177,7 +187,7 @@ func (c *Collector) updateQueryLog(ctx context.Context) {
 	logData, err := c.api.QueryLog(ctx)
 	if err != nil {
 		logx.Printf("ERROR", "Failed querylog: %v", err)
-		return
+		return err
 	}
 
 	ttl := int64(QueryTTL / time.Second)
@@ -210,6 +220,8 @@ func (c *Collector) updateQueryLog(ctx context.Context) {
 		geoResolved,
 		c.dedupHits,
 	)
+
+	return nil
 }
 
 // count adds one entry to the query metrics and reports whether its client
