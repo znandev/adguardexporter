@@ -15,6 +15,10 @@ import (
 	"github.com/znand-dev/adguardexporter/internal/logx"
 )
 
+// adguardDefaultLimit is AdGuard Home's default number of query log entries
+// per request.
+const adguardDefaultLimit = 500
+
 // QueryTTL is how long a query log entry key suppresses identical entries.
 const QueryTTL = 5 * time.Minute
 
@@ -22,7 +26,7 @@ const QueryTTL = 5 * time.Minute
 type API interface {
 	Stats(ctx context.Context) (*adguard.Stats, error)
 	Status(ctx context.Context) (*adguard.Status, error)
-	QueryLog(ctx context.Context) (*adguard.QueryLog, error)
+	QueryLog(ctx context.Context, limit int) (*adguard.QueryLog, error)
 }
 
 // Collector updates the metrics in a loop. Its methods are not safe for
@@ -184,7 +188,7 @@ func (c *Collector) updateQueryLog(ctx context.Context) error {
 	skipped := 0
 	geoResolved := 0
 
-	logData, err := c.api.QueryLog(ctx)
+	logData, err := c.api.QueryLog(ctx, adguardDefaultLimit)
 	if err != nil {
 		logx.Printf("ERROR", "Failed querylog: %v", err)
 		return err

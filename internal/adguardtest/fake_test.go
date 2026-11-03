@@ -114,10 +114,6 @@ func TestQueryLogDefaultLimit(t *testing.T) {
 	if _, p := get(t, s, PathQueryLog, url.Values{"limit": {"2000"}}); len(p.Data) != 2*DefaultQueryLogLimit+1 {
 		t.Errorf("limit 2000: got %d entries", len(p.Data))
 	}
-	s.SetMaxPage(7)
-	if _, p := get(t, s, PathQueryLog, url.Values{"limit": {"2000"}}); len(p.Data) != 7 {
-		t.Errorf("max page 7: got %d entries", len(p.Data))
-	}
 }
 
 func TestAuthAndFailures(t *testing.T) {

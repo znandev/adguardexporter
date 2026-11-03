@@ -29,7 +29,7 @@ func (f *fakeAPI) Stats(context.Context) (*adguard.Stats, error) {
 
 func (f *fakeAPI) Status(context.Context) (*adguard.Status, error) { return f.status, nil }
 
-func (f *fakeAPI) QueryLog(context.Context) (*adguard.QueryLog, error) { return f.log, nil }
+func (f *fakeAPI) QueryLog(context.Context, int) (*adguard.QueryLog, error) { return f.log, nil }
 
 func entry(client, name, reason, elapsed string) adguard.QueryLogEntry {
 	var e adguard.QueryLogEntry

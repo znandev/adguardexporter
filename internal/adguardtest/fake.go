@@ -74,7 +74,6 @@ type Server struct {
 	stats    any
 	status   any
 	entries  []Entry
-	maxPage  int
 	failures map[string]int
 	requests []Request
 	counts   map[string]int
@@ -150,15 +149,6 @@ func (s *Server) ClearEntries() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.entries = nil
-}
-
-// SetMaxPage caps the number of entries per query log response, whatever
-// limit the client asks for. Zero means no cap. AdGuard Home has no such cap;
-// tests use it to force page boundaries.
-func (s *Server) SetMaxPage(n int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.maxPage = n
 }
 
 // Fail makes the next n requests to path answer with status 500. A negative n
@@ -300,9 +290,6 @@ func (s *Server) queryLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mu.Lock()
-	if s.maxPage > 0 && limit > s.maxPage {
-		limit = s.maxPage
-	}
 	// Candidates in reverse write order, starting before the sought entry.
 	end := len(s.entries)
 	if !olderThan.IsZero() {
