@@ -14,6 +14,12 @@ const (
 	DefaultPort     = "9617"
 	DefaultInterval = 15 * time.Second
 	DefaultGeoIPDB  = "GeoLite2-City.mmdb"
+
+	DefaultQueryLogOverlap    = time.Minute
+	DefaultQueryLogMaxEntries = 20000
+	// MaxQueryLogMaxEntries keeps requests below AdGuard Home's limit of
+	// 50000 entries scanned per request.
+	MaxQueryLogMaxEntries = 50000
 )
 
 // Config is the exporter configuration.
@@ -24,6 +30,9 @@ type Config struct {
 	Interval time.Duration
 	LogLevel string // LOG_LEVEL
 	GeoIPDB  string // GEOIP_DB
+
+	QueryLogOverlap    time.Duration // QUERYLOG_OVERLAP
+	QueryLogMaxEntries int           // QUERYLOG_MAX_ENTRIES
 
 	pass     string // ADGUARD_PASS
 	passFile string // ADGUARD_PASS_FILE
@@ -50,6 +59,16 @@ func Load(getenv func(string) string) Config {
 	c.Interval = DefaultInterval
 	if s, err := strconv.Atoi(getenv("SCRAPE_INTERVAL")); err == nil && s >= 1 {
 		c.Interval = time.Duration(s) * time.Second
+	}
+
+	c.QueryLogOverlap = DefaultQueryLogOverlap
+	if d, err := time.ParseDuration(getenv("QUERYLOG_OVERLAP")); err == nil && d > 0 {
+		c.QueryLogOverlap = d
+	}
+
+	c.QueryLogMaxEntries = DefaultQueryLogMaxEntries
+	if n, err := strconv.Atoi(getenv("QUERYLOG_MAX_ENTRIES")); err == nil && n >= 1 {
+		c.QueryLogMaxEntries = min(n, MaxQueryLogMaxEntries)
 	}
 
 	return c

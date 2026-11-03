@@ -38,6 +38,7 @@ type metrics struct {
 	exporterQueryCacheSize prometheus.Gauge
 	exporterGeoCacheSize   prometheus.Gauge
 	exporterDedupHits      prometheus.Counter
+	exporterQueryLogGaps   *prometheus.CounterVec
 }
 
 func newMetrics() *metrics {
@@ -155,7 +156,7 @@ func newMetrics() *metrics {
 		}),
 		exporterQueryCacheSize: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "adguard_exporter_query_cache_size",
-			Help: "Current number of entries in query deduplication cache",
+			Help: "Deprecated: always 0, will be removed in the next release. Query log entries are no longer deduplicated by a cache.",
 		}),
 		exporterGeoCacheSize: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "adguard_exporter_geo_cache_size",
@@ -163,9 +164,23 @@ func newMetrics() *metrics {
 		}),
 		exporterDedupHits: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "adguard_exporter_dedup_hits_total",
-			Help: "Total number of duplicate queries skipped by deduplication",
+			Help: "Deprecated: always 0, will be removed in the next release. Query log entries are no longer deduplicated by a cache.",
 		}),
+		exporterQueryLogGaps: newGaps(),
 	}
+}
+
+// newGaps returns adguard_exporter_querylog_gaps_total with every reason
+// present from the start.
+func newGaps() *prometheus.CounterVec {
+	g := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "adguard_exporter_querylog_gaps_total",
+		Help: "Loops in which query log entries may have been missed (reason: limit = more new entries than QUERYLOG_MAX_ENTRIES, reset = entries counted before vanished from the query log)",
+	}, []string{"reason"})
+	for _, r := range []string{gapLimit, gapReset} {
+		g.WithLabelValues(r)
+	}
+	return g
 }
 
 // collectors lists every metric for registration.
@@ -201,5 +216,6 @@ func (m *metrics) collectors() []prometheus.Collector {
 		m.exporterGeoCacheSize,
 		m.exporterDedupHits,
 		m.queryCountByISP,
+		m.exporterQueryLogGaps,
 	}
 }

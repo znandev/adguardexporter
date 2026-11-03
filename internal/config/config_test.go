@@ -22,6 +22,9 @@ func TestLoadDefaults(t *testing.T) {
 	if c.GeoIPDB != DefaultGeoIPDB {
 		t.Errorf("GeoIPDB = %q, want %q", c.GeoIPDB, DefaultGeoIPDB)
 	}
+	if c.QueryLogOverlap != DefaultQueryLogOverlap || c.QueryLogMaxEntries != DefaultQueryLogMaxEntries {
+		t.Errorf("query log = %v, %d, want %v, %d", c.QueryLogOverlap, c.QueryLogMaxEntries, DefaultQueryLogOverlap, DefaultQueryLogMaxEntries)
+	}
 }
 
 func TestLoad(t *testing.T) {
@@ -32,6 +35,9 @@ func TestLoad(t *testing.T) {
 		"SCRAPE_INTERVAL": "30",
 		"LOG_LEVEL":       "DEBUG",
 		"GEOIP_DB":        "/data/city.mmdb",
+
+		"QUERYLOG_OVERLAP":     "90s",
+		"QUERYLOG_MAX_ENTRIES": "5000",
 	}))
 	want := Config{
 		Host:     "http://adguard:3000",
@@ -40,6 +46,9 @@ func TestLoad(t *testing.T) {
 		Interval: 30 * time.Second,
 		LogLevel: "DEBUG",
 		GeoIPDB:  "/data/city.mmdb",
+
+		QueryLogOverlap:    90 * time.Second,
+		QueryLogMaxEntries: 5000,
 	}
 	if c != want {
 		t.Errorf("Load = %+v, want %+v", c, want)
@@ -54,6 +63,24 @@ func TestLoadInvalidInterval(t *testing.T) {
 	}
 	if got := Load(env(map[string]string{"SCRAPE_INTERVAL": "1"})).Interval; got != time.Second {
 		t.Errorf("SCRAPE_INTERVAL=1: Interval = %v, want 1s", got)
+	}
+}
+
+// Invalid query log settings fall back to the defaults, like
+// SCRAPE_INTERVAL; QUERYLOG_MAX_ENTRIES is capped at MaxQueryLogMaxEntries.
+func TestLoadQueryLog(t *testing.T) {
+	for _, v := range []string{"", "abc", "0", "-1m", "60"} {
+		if got := Load(env(map[string]string{"QUERYLOG_OVERLAP": v})).QueryLogOverlap; got != DefaultQueryLogOverlap {
+			t.Errorf("QUERYLOG_OVERLAP=%q: %v, want %v", v, got, DefaultQueryLogOverlap)
+		}
+	}
+	for _, v := range []string{"", "abc", "0", "-5", "1.5"} {
+		if got := Load(env(map[string]string{"QUERYLOG_MAX_ENTRIES": v})).QueryLogMaxEntries; got != DefaultQueryLogMaxEntries {
+			t.Errorf("QUERYLOG_MAX_ENTRIES=%q: %d, want %d", v, got, DefaultQueryLogMaxEntries)
+		}
+	}
+	if got := Load(env(map[string]string{"QUERYLOG_MAX_ENTRIES": "100000"})).QueryLogMaxEntries; got != MaxQueryLogMaxEntries {
+		t.Errorf("QUERYLOG_MAX_ENTRIES=100000: %d, want %d", got, MaxQueryLogMaxEntries)
 	}
 }
 

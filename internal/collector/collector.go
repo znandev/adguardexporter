@@ -19,9 +19,6 @@ import (
 // per request.
 const adguardDefaultLimit = 500
 
-// QueryTTL is how long a query log entry key suppresses identical entries.
-const QueryTTL = 5 * time.Minute
-
 // API is the part of the AdGuard Home API the collector reads.
 type API interface {
 	Stats(ctx context.Context) (*adguard.Stats, error)
@@ -32,24 +29,29 @@ type API interface {
 // Collector updates the metrics in a loop. Its methods are not safe for
 // concurrent use; the loop runs in a single goroutine.
 type Collector struct {
-	api API
-	geo *geo.Resolver
-	m   *metrics
-	now func() time.Time
+	api    API
+	geo    *geo.Resolver
+	m      *metrics
+	cursor *queryLogCursor
+}
 
-	// querySeen maps an entry key to the Unix time it was last counted.
-	querySeen map[string]int64
-	dedupHits int64
+// QueryLogOptions configure how the query log is read.
+type QueryLogOptions struct {
+	// Overlap is the longest expected time between a query's start and the
+	// moment AdGuard Home writes it to the query log (QUERYLOG_OVERLAP).
+	Overlap time.Duration
+	// MaxEntries caps the entries requested in one loop
+	// (QUERYLOG_MAX_ENTRIES).
+	MaxEntries int
 }
 
 // New returns a collector whose metrics are registered with reg.
-func New(api API, resolver *geo.Resolver, reg prometheus.Registerer) *Collector {
+func New(api API, resolver *geo.Resolver, reg prometheus.Registerer, opts QueryLogOptions) *Collector {
 	c := &Collector{
-		api:       api,
-		geo:       resolver,
-		m:         newMetrics(),
-		now:       time.Now,
-		querySeen: map[string]int64{},
+		api:    api,
+		geo:    resolver,
+		m:      newMetrics(),
+		cursor: newQueryLogCursor(opts.Overlap, opts.MaxEntries),
 	}
 	reg.MustRegister(c.m.collectors()...)
 	return c
@@ -82,22 +84,18 @@ func (c *Collector) RunOnce(ctx context.Context) {
 		}
 	}
 
-	c.cleanupQueryCache()
-
 	duration := time.Since(start).Seconds()
 
 	c.m.exporterScrapeDuration.Set(duration)
 	c.m.exporterUp.Set(boolValue(up))
 
-	c.m.exporterQueryCacheSize.Set(float64(len(c.querySeen)))
 	c.m.exporterGeoCacheSize.Set(float64(c.geo.CacheSize()))
 
 	logx.Printf(
 		"DEBUG",
-		"Exporter caches: query_cache_entries=%d geo_cache_entries=%d dedup_hits_total=%d",
-		len(c.querySeen),
+		"Exporter caches: querylog_window_entries=%d geo_cache_entries=%d",
+		len(c.cursor.window),
 		c.geo.CacheSize(),
-		c.dedupHits,
 	)
 
 	logx.Printf("DEBUG", "Scrape finished in %.3fs", duration)
@@ -177,55 +175,75 @@ func boolValue(b bool) float64 {
 	return 0
 }
 
-// queryKey identifies an entry for deduplication.
-func queryKey(q *adguard.QueryLogEntry) string {
-	return q.Client + "|" + q.Question.Name + "|" + q.Upstream + "|" + q.Reason + "|" + q.Elapsed
-}
-
+// updateQueryLog counts the entries written since the previous loop. A
+// failed request leaves the cursor unchanged, so the next loop counts them.
 func (c *Collector) updateQueryLog(ctx context.Context) error {
-	scanned := 0
-	processed := 0
-	skipped := 0
-	geoResolved := 0
-
-	logData, err := c.api.QueryLog(ctx, adguardDefaultLimit)
+	requests := 0
+	entries, limit, complete, err := c.fetchQueryLog(ctx, c.cursor.limit, &requests)
 	if err != nil {
-		logx.Printf("ERROR", "Failed querylog: %v", err)
 		return err
 	}
 
-	ttl := int64(QueryTTL / time.Second)
-
-	for i := range logData.Data {
-		q := &logData.Data[i]
-		scanned++
-
-		key := queryKey(q)
-		now := c.now().Unix()
-		if ts, exists := c.querySeen[key]; exists && now-ts < ttl {
-			skipped++
-			c.dedupHits++
-			c.m.exporterDedupHits.Inc()
-			continue
+	fresh, gap, vanished := c.cursor.advance(entries, complete)
+	if gap == gapReset {
+		// The cursor moved to a new reference time; read until the response
+		// covers its counting window, so the window holds every entry in it.
+		entries, limit, complete, err = c.fetchQueryLog(ctx, limit, &requests)
+		if err != nil {
+			c.cursor.restart()
+		} else {
+			c.cursor.reset(entries, c.cursor.newest)
+			if !complete {
+				gap = gapLimit
+			}
 		}
-		c.querySeen[key] = now
+	}
+	if err == nil {
+		c.cursor.nextLimit(entries, limit)
+	}
 
-		processed++
+	geoResolved := 0
+	for _, q := range fresh {
 		if c.count(q) {
 			geoResolved++
 		}
 	}
 
+	if gap != "" {
+		c.m.exporterQueryLogGaps.WithLabelValues(gap).Inc()
+		logx.Printf("WARN", "Query log gap (%s): entries may have been missed", gap)
+	} else if vanished > 0 {
+		logx.Printf("DEBUG", "Querylog: %d counted entries vanished from the query log (memory buffer overflow in AdGuard Home)", vanished)
+	}
+
 	logx.Printf("DEBUG",
-		"Querylog: scanned=%d new=%d skipped=%d geoip=%d dedupHits=%d",
-		scanned,
-		processed,
-		skipped,
+		"Querylog: requests=%d limit=%d scanned=%d new=%d geoip=%d",
+		requests,
+		limit,
+		len(entries),
+		len(fresh),
 		geoResolved,
-		c.dedupHits,
 	)
 
-	return nil
+	return err
+}
+
+// fetchQueryLog requests limit entries and doubles the limit until the
+// response is complete or MaxEntries is reached.
+func (c *Collector) fetchQueryLog(ctx context.Context, limit int, requests *int) ([]adguard.QueryLogEntry, int, bool, error) {
+	for {
+		logData, err := c.api.QueryLog(ctx, limit)
+		if err != nil {
+			logx.Printf("ERROR", "Failed querylog: %v", err)
+			return nil, limit, false, err
+		}
+		*requests++
+		complete := c.cursor.complete(logData.Data, limit)
+		if complete || limit >= c.cursor.maxEntries {
+			return logData.Data, limit, complete, nil
+		}
+		limit = min(2*limit, c.cursor.maxEntries)
+	}
 }
 
 // count adds one entry to the query metrics and reports whether its client
@@ -263,15 +281,4 @@ func (c *Collector) count(q *adguard.QueryLogEntry) bool {
 	}
 
 	return resolved
-}
-
-// cleanupQueryCache drops keys older than QueryTTL.
-func (c *Collector) cleanupQueryCache() {
-	now := c.now().Unix()
-	ttl := int64(QueryTTL / time.Second)
-	for k, v := range c.querySeen {
-		if now-v > ttl {
-			delete(c.querySeen, k)
-		}
-	}
 }
