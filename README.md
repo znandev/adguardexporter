@@ -10,10 +10,10 @@ A lightweight Prometheus exporter written in Go that exposes detailed metrics fr
 |----------|--------------|
 | API Integration | • Authenticated access to AdGuard Home API<br>• Supports `/control/status`, `/control/stats`, and `/control/querylog` endpoints |
 | DNS Analytics | • Total DNS queries metrics<br>• Blocked DNS queries tracking<br>• Upstream DNS statistics<br>• Per-client query statistics<br>• Query reason statistics<br>• DNS upstream latency histograms |
-| Query Log Processing | • Real-time query log analysis<br>• Query deduplication to prevent metric inflation<br>• Domain and query reason tracking |
+| Query Log Processing | • Real-time query log analysis<br>• Every query log entry counted exactly once<br>• Domain and query reason tracking |
 | GeoIP Enrichment | • MaxMind GeoLite2 IP geolocation lookup<br>• DNS client geographic visualization (Grafana Geomap)<br>• DNS threat map for blocked queries<br>• GeoIP caching for improved performance |
 | Traffic Analytics | • DNS queries grouped by ISP organization<br>• Country-level DNS traffic insights<br>• ISP-based DNS traffic monitoring |
-| Exporter Monitoring | • Deduplication cache metrics<br>• GeoIP cache usage monitoring<br>• Deduplication hit counters<br>• Exporter scrape performance metrics |
+| Exporter Monitoring | • Exporter health per scrape<br>• Query log gap counters<br>• GeoIP cache usage monitoring<br>• Exporter scrape performance metrics |
 | Deployment | • Customizable scrape interval<br>• Lightweight single binary deployment<br>• Docker-friendly deployment |
 
 ---
@@ -79,6 +79,8 @@ After that, you should got the output like this:
 | `EXPORTER_PORT`   | Port to expose metrics (default: 9617) | ❌       | `9200`                       |
 | `SCRAPE_INTERVAL` | How often to scrape (default: `15` for 15s)    | ❌       | `30`                        |
 | `LOG_LEVEL`       | Log Level to analyze, INFO, WARN, DEBUG | ❌      | `DEBUG`,`WARN`,`INFO`        |
+| `QUERYLOG_OVERLAP` | Longest expected time between a query's start and AdGuard Home writing it to the query log (default: `1m`), see [How query log entries are counted](#how-query-log-entries-are-counted) | ❌ | `30s` |
+| `QUERYLOG_MAX_ENTRIES` | Maximum query log entries requested per scrape (default: `20000`, at most `50000`) | ❌ | `5000` |
 
 ---
 
@@ -235,6 +237,20 @@ Metrics generated from AdGuard query log analysis.
 * `adguard_query_upstream_total{upstream="8.8.8.8"}`
 * `adguard_query_client_reason_total{client="192.168.1.10",reason="FilteredBlackList"}`
 
+#### How query log entries are counted
+
+Every entry of AdGuard Home's query log is counted once. Entries that were already in the log when the exporter started are not counted.
+
+AdGuard Home returns the most recently *written* entries, but an entry's time is when the query *started*, so a slow query is written after faster, newer ones. Each scrape therefore reads the newest entries, doubling the number requested from 500 until the response reaches back twice `QUERYLOG_OVERLAP` before the newest entry counted so far. Entries from the last `QUERYLOG_OVERLAP` are compared by their content with the previous scrape; everything else in that window is new. With a busy AdGuard Home, a scrape reads about (queries per second) × (2 × `QUERYLOG_OVERLAP` + `SCRAPE_INTERVAL`) entries.
+
+Limitations:
+
+* A query written to the log more than `QUERYLOG_OVERLAP` after it started is not counted. AdGuard Home's upstream timeout is 10 seconds by default.
+* Queries answered while the exporter is not running are not counted.
+* If more entries were written since the previous scrape than `QUERYLOG_MAX_ENTRIES`, the exporter counts only the newest and increases `adguard_exporter_querylog_gaps_total{reason="limit"}`.
+* If every entry counted in the last `QUERYLOG_OVERLAP` vanishes from the log (the log was cleared, AdGuard Home's clock stepped back, or client IP anonymisation was switched), `adguard_exporter_querylog_gaps_total{reason="reset"}` increases. New entries are still counted, but switching anonymisation can count the last `QUERYLOG_OVERLAP` once more, and after a clock step the exporter counts again only once the entries from before the step have left the newest entries.
+* Under load, AdGuard Home itself drops entries from its query log: it keeps the newest `querylog.size_memory` entries (default 1000) in a ring buffer and writes them to the file asynchronously, so entries that arrive before the write overwrite the oldest ones. The exporter usually sees these entries before they are dropped, so its counts can be slightly higher than the query log shows. This is not reported as a gap.
+
 ---
 
 ### Upstream Latency Metrics
@@ -303,12 +319,13 @@ adguard_blocked_geo_queries{client="118.99.94.204",country="ID",lat="-2.969000",
 
 Metrics used to monitor the exporter itself.
 
-* `adguard_exporter_up` — Indicates if the exporter successfully scraped the AdGuard API.
+* `adguard_exporter_up` — 1 if every AdGuard Home API call of the last scrape succeeded, otherwise 0.
 * `adguard_exporter_scrape_duration_seconds` — Time taken for the exporter to scrape AdGuard API data.
-* `adguard_exporter_scrape_errors_total` — Total number of errors encountered during scraping.
-* `adguard_exporter_query_cache_size` — Number of cached DNS query entries used for deduplication.
+* `adguard_exporter_scrape_errors_total` — Number of failed AdGuard Home API calls.
+* `adguard_exporter_querylog_gaps_total{reason="limit"|"reset"}` — Scrapes in which query log entries may have been missed, see [How query log entries are counted](#how-query-log-entries-are-counted).
 * `adguard_exporter_geo_cache_size` — Number of cached GeoIP lookup entries.
-* `adguard_exporter_dedup_hits_total` — Total number of duplicate DNS queries skipped by the exporter.
+* `adguard_exporter_query_cache_size` — **Deprecated**, always 0, will be removed in the next release.
+* `adguard_exporter_dedup_hits_total` — **Deprecated**, always 0, will be removed in the next release.
   
 ---
 
