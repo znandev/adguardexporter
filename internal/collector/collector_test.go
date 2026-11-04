@@ -82,7 +82,11 @@ var testOpts = QueryLogOptions{Overlap: time.Minute, MaxEntries: 20000}
 
 func newCollector(t *testing.T, api *fakeAPI, opts QueryLogOptions) *Collector {
 	t.Helper()
-	return New(api, geo.New(nil), prometheus.NewRegistry(), opts)
+	c, err := New(api, geo.New(nil), prometheus.NewRegistry(), Options{QueryLog: opts})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
 }
 
 func emptyAPI() *fakeAPI {
@@ -91,7 +95,10 @@ func emptyAPI() *fakeAPI {
 
 func TestRegistersEveryMetricOnce(t *testing.T) {
 	reg := prometheus.NewRegistry()
-	c := New(emptyAPI(), geo.New(nil), reg, testOpts)
+	c, err := New(emptyAPI(), geo.New(nil), reg, Options{QueryLog: testOpts})
+	if err != nil {
+		t.Fatal(err)
+	}
 	c.RunOnce(context.Background())
 	if _, err := reg.Gather(); err != nil {
 		t.Fatal(err)
