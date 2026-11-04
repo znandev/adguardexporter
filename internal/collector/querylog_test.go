@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"slices"
 	"testing"
 	"time"
@@ -316,9 +317,10 @@ func TestDeprecatedMetrics(t *testing.T) {
 	}
 }
 
-// If the request that refills the window after a reset fails, the next
-// loop starts over instead of trusting a window that may be incomplete.
-func TestCursorResyncFailure(t *testing.T) {
+// Entries written while the limit grows in a loop that detects a reset are
+// counted exactly once (review of #107): counting and the new window come
+// from the same response.
+func TestCursorEntriesWhileResetting(t *testing.T) {
 	api := emptyAPI()
 	c := newCollector(t, api, testOpts)
 	run(c)
@@ -326,32 +328,170 @@ func TestCursorResyncFailure(t *testing.T) {
 	run(c)
 
 	api.written = nil
-	api.write(series(2, time.Second, time.Millisecond)...)
+	api.write(series(700, time.Second, time.Millisecond)...)
 	base := len(api.limits)
-	api.onQueryLog = func(n int) {
-		if n == base+2 {
-			api.logErr = errors.New("down")
-		}
+	added := 0
+	api.onQueryLog = func(int) {
+		api.write(series(2, 2*time.Second+time.Duration(added)*time.Millisecond, time.Microsecond)...)
+		added += 2
 	}
 	run(c)
-	if got := testutil.ToFloat64(c.m.exporterUp); got != 0 {
-		t.Errorf("up = %v, want 0", got)
+	if requests := len(api.limits) - base; requests < 2 {
+		t.Fatalf("%d requests in the reset loop, want the limit to grow", requests)
 	}
-	if got := counted(c); got != 7 {
-		t.Errorf("counted %v, want 7 (the fresh entries are still counted)", got)
+	api.onQueryLog = nil
+	run(c)
+	run(c)
+	if got, want := counted(c), float64(5+700+added); got != want {
+		t.Errorf("counted %v, want %v", got, want)
+	}
+	if got := gaps(c, gapReset); got != 1 {
+		t.Errorf("reset gaps = %v, want 1", got)
+	}
+}
+
+// A loop can show a reset and be truncated at the same time; both reasons
+// are counted (review of #107). Here AdGuard Home's clock steps back an hour
+// and more entries than MaxEntries follow within the new window. If the
+// response cannot even cover the old window, a reset cannot be told from a
+// truncation and only the limit gap is counted.
+func TestCursorResetAndLimitGap(t *testing.T) {
+	api := emptyAPI()
+	c := newCollector(t, api, QueryLogOptions{Overlap: time.Minute, MaxEntries: 1000})
+	run(c)
+	api.write(series(5, 0, time.Millisecond)...)
+	run(c)
+
+	api.write(series(1500, -time.Hour, time.Millisecond)...)
+	run(c)
+	if gaps(c, gapReset) != 1 || gaps(c, gapLimit) != 1 {
+		t.Errorf("reset gaps = %v, limit gaps = %v, want 1 and 1", gaps(c, gapReset), gaps(c, gapLimit))
 	}
 
-	api.onQueryLog, api.logErr = nil, nil
-	api.write(simple(2 * time.Second))
+	api.written = nil
+	api.write(series(1500, time.Second, time.Millisecond)...)
 	run(c)
-	if got := counted(c); got != 7 {
-		t.Errorf("counted %v in the restart loop, want 7", got)
+	if gaps(c, gapReset) != 1 || gaps(c, gapLimit) != 2 {
+		t.Errorf("reset gaps = %v, limit gaps = %v, want 1 and 2", gaps(c, gapReset), gaps(c, gapLimit))
 	}
-	api.write(simple(3 * time.Second))
-	run(c)
-	if got := counted(c); got != 8 {
-		t.Errorf("counted %v, want 8", got)
+}
+
+// A late-written window entry in a truncated response (review of #107). The
+// response holds the newest written entries, so if it contains the window
+// entry X, it contains everything written after X, and everything written
+// before X was written before the previous request and handled then.
+func TestCursorLateWindowEntryAtTruncation(t *testing.T) {
+	setup := func(t *testing.T) (*fakeAPI, *Collector) {
+		api := emptyAPI()
+		c := newCollector(t, api, QueryLogOptions{Overlap: time.Second, MaxEntries: 10})
+		api.write(simple(-10 * time.Second))
+		run(c)
+		// Eight fast queries, then X, which started earlier but finished
+		// last.
+		api.write(series(8, 0, time.Millisecond)...)
+		api.write(simple(-500 * time.Millisecond))
+		run(c)
+		if got := counted(c); got != 9 {
+			t.Fatalf("counted %v, want 9", got)
+		}
+		return api, c
 	}
+
+	t.Run("window entry still in the response", func(t *testing.T) {
+		api, c := setup(t)
+		// Nine new entries: the response holds them and X, not the eight
+		// fast ones, which have newer start times than X but were written
+		// before it.
+		api.write(series(9, time.Second, time.Millisecond)...)
+		run(c)
+		if got := counted(c); got != 18 {
+			t.Errorf("counted %v, want 18", got)
+		}
+		if gaps(c, gapLimit)+gaps(c, gapReset) != 0 {
+			t.Error("unexpected gap")
+		}
+	})
+
+	t.Run("no window entry left", func(t *testing.T) {
+		api, c := setup(t)
+		// Eleven new entries: one of them is cut off with X.
+		api.write(series(11, time.Second, time.Millisecond)...)
+		run(c)
+		if got := counted(c); got != 19 {
+			t.Errorf("counted %v, want 19 (the newest 10)", got)
+		}
+		if got := gaps(c, gapLimit); got != 1 {
+			t.Errorf("limit gaps = %v, want 1", got)
+		}
+	})
+}
+
+// Random write orders and burst sizes, with late writes within the overlap,
+// identical entries and single entries dropped from the log like AdGuard
+// Home's ring buffer does. A loop without a gap counts exactly the entries
+// written since the previous request; a loop with a gap never counts more.
+// With the small limits, many loops are truncated responses that still
+// overlap the window (review of #107).
+func TestCursorRandomised(t *testing.T) {
+	truncatedWithoutGap := 0
+	for seed := range int64(40) {
+		t.Run(fmt.Sprint(seed), func(t *testing.T) {
+			rng := rand.New(rand.NewPCG(uint64(seed), 1))
+			maxEntries := []int{30, 60, 200, 2000}[seed%4]
+			api := emptyAPI()
+			c := newCollector(t, api, QueryLogOptions{Overlap: time.Minute, MaxEntries: maxEntries})
+
+			now := t0
+			seq := 0
+			write := func(n int) {
+				batch := make([]adguard.QueryLogEntry, 0, n)
+				for range n {
+					seq++
+					start := now.Add(-time.Duration(rng.Int64N(int64(time.Minute))))
+					e := entry(start, "192.168.1.10", fmt.Sprintf("q%d.example", seq), "NotFilteredNotFound", "1")
+					batch = append(batch, e)
+					if rng.IntN(50) == 0 {
+						batch = append(batch, e)
+					}
+				}
+				rng.Shuffle(len(batch), func(i, j int) { batch[i], batch[j] = batch[j], batch[i] })
+				api.write(batch...)
+			}
+
+			write(rng.IntN(100))
+			run(c)
+			for loop := range 40 {
+				now = now.Add(5 * time.Second)
+				before := len(api.written)
+				write(rng.IntN(maxEntries*3/2 + 1))
+				written := len(api.written) - before
+				if loop > 2 && len(api.written) > 50 && rng.IntN(5) == 0 {
+					// Drop a single entry written at least two loops ago.
+					i := rng.IntN(len(api.written) / 2)
+					api.written = slices.Delete(api.written, i, i+1)
+				}
+
+				countedBefore := counted(c)
+				gapsBefore := gaps(c, gapLimit) + gaps(c, gapReset)
+				run(c)
+				got := counted(c) - countedBefore
+				gap := gaps(c, gapLimit)+gaps(c, gapReset) > gapsBefore
+				if !gap && api.limits[len(api.limits)-1] == maxEntries && len(api.written) > maxEntries {
+					truncatedWithoutGap++
+				}
+				if !gap && got != float64(written) {
+					t.Fatalf("loop %d: counted %v of %d new entries without a gap", loop, got, written)
+				}
+				if gap && got > float64(written) {
+					t.Fatalf("loop %d: counted %v of %d new entries in a gap loop", loop, got, written)
+				}
+			}
+		})
+	}
+	if truncatedWithoutGap == 0 {
+		t.Error("no truncated response without a gap; the overlap case is not covered")
+	}
+	t.Logf("%d truncated responses without a gap", truncatedWithoutGap)
 }
 
 // AdGuard Home's memory buffer can overwrite entries under load before they

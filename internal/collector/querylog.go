@@ -37,9 +37,10 @@ const (
 	// within QUERYLOG_MAX_ENTRIES and shares no entry with it, so new entries
 	// were skipped.
 	gapLimit = "limit"
-	// gapReset: every entry counted in the window is missing from the
-	// response, e.g. because the query log was cleared, AdGuard Home's clock
-	// stepped back or client IP anonymisation was switched on or off.
+	// gapReset: a response that covers the counting window holds none of
+	// its counted entries, e.g. because the query log was cleared, AdGuard
+	// Home's clock stepped back or client IP anonymisation was switched on or
+	// off.
 	gapReset = "reset"
 )
 
@@ -56,6 +57,9 @@ type queryLogCursor struct {
 	// window holds the IDs of the entries in the counting window, with the
 	// number of entries per ID.
 	window map[string]int
+	// resetting is set during a loop once a response showed that the log
+	// was reset.
+	resetting bool
 }
 
 func newQueryLogCursor(overlap time.Duration, maxEntries int) *queryLogCursor {
@@ -67,17 +71,38 @@ func newQueryLogCursor(overlap time.Duration, maxEntries int) *queryLogCursor {
 	}
 }
 
+// begin starts a loop.
+func (c *queryLogCursor) begin() { c.resetting = false }
+
 // complete reports whether entries, the response to limit, contains every
-// entry of the counting window.
+// entry of the counting window. A response that does so for the current
+// window but holds none of its entries shows that the log was reset; from
+// then on in this loop, the response has to cover the window around the
+// time advance resynchronises on.
 func (c *queryLogCursor) complete(entries []adguard.QueryLogEntry, limit int) bool {
+	if !c.started {
+		return covers(entries, limit, latest(entries), c.overlap)
+	}
+	if !c.resetting {
+		if !covers(entries, limit, c.newest, c.overlap) {
+			return false
+		}
+		if len(c.window) == 0 || overlaps(entries, c.window) {
+			return true
+		}
+		c.resetting = true
+	}
+	return covers(entries, limit, c.resyncTime(entries), c.overlap)
+}
+
+// covers reports whether a response to limit contains every entry from
+// ref-overlap on: it is the whole log, or it reaches an entry older than
+// ref-2*overlap, which was written before all of them.
+func covers(entries []adguard.QueryLogEntry, limit int, ref time.Time, overlap time.Duration) bool {
 	if len(entries) < limit {
 		return true
 	}
-	ref := c.newest
-	if !c.started {
-		ref = latest(entries)
-	}
-	bound := ref.Add(-2 * c.overlap)
+	bound := ref.Add(-2 * overlap)
 	for i := range entries {
 		if entries[i].Time.Before(bound) {
 			return true
@@ -86,16 +111,28 @@ func (c *queryLogCursor) complete(entries []adguard.QueryLogEntry, limit int) bo
 	return false
 }
 
+// resyncTime is the reference time after a reset: the latest entry not
+// counted before, or the current one if there is none. After AdGuard Home's
+// clock stepped back, the old reference would keep the window in the future.
+func (c *queryLogCursor) resyncTime(entries []adguard.QueryLogEntry) time.Time {
+	if t, ok := latestUnseen(entries, c.window); ok {
+		return t
+	}
+	return c.newest
+}
+
 // advance takes the final response of a loop, which was complete or reached
-// maxEntries, and returns the entries to count, the gap reason, if any, and
-// how many counted entries of the window have vanished.
-func (c *queryLogCursor) advance(entries []adguard.QueryLogEntry, complete bool) (fresh []*adguard.QueryLogEntry, gap string, vanished int) {
+// maxEntries, and returns the entries to count, the gap reasons, if any, and
+// how many counted entries of the window have vanished. Counting and the new
+// window both come from this one response, so no entry written between two
+// requests of the loop can be skipped.
+func (c *queryLogCursor) advance(entries []adguard.QueryLogEntry, complete bool) (fresh []*adguard.QueryLogEntry, gaps []string, vanished int) {
 	if !c.started {
 		// The first response only sets the start; entries written before the
 		// exporter started are not counted.
 		c.started = true
 		c.reset(entries, latest(entries))
-		return nil, "", 0
+		return nil, nil, 0
 	}
 
 	cut := c.newest.Add(-c.overlap)
@@ -115,41 +152,29 @@ func (c *queryLogCursor) advance(entries []adguard.QueryLogEntry, complete bool)
 		}
 	}
 
-	windowSize := 0
 	for id, n := range c.window {
-		windowSize += n
 		if m := inResponse[id]; m < n {
 			vanished += n - m
 		}
 	}
-	if windowSize > 0 && vanished == windowSize {
-		gap = gapReset
-		// Resynchronise on the entries not seen before: after AdGuard Home's
-		// clock stepped back, the old newest would keep the window in the
-		// future. The fresh entries are still counted (best effort). The
-		// caller reads the log again to fill the new window.
-		newest = c.newest
-		if t, ok := latestUnseen(entries, c.window); ok {
-			newest = t
-		}
+	if c.resetting {
+		// The fresh entries are still counted (best effort).
+		gaps = append(gaps, gapReset)
+		newest = c.resyncTime(entries)
+		c.resetting = false
 	}
 	if !complete && !overlaps(entries, c.window) {
-		// A response that contains an entry of the window is a suffix of
-		// the write order reaching back before the previous loop, so nothing
-		// was skipped even if completeness could not be shown by time (the
-		// window holds more than maxEntries entries).
-		gap = gapLimit
+		// The response is the newest written entries, a suffix of the write
+		// order. Every window entry was written before the previous loop's
+		// request, so if one of them is in the response, so is every entry
+		// written since; nothing new was skipped even though completeness
+		// could not be shown by time (the window holds more than maxEntries
+		// entries). Without such an entry, new entries may be missing.
+		gaps = append(gaps, gapLimit)
 	}
 
 	c.reset(entries, newest)
-	return fresh, gap, vanished
-}
-
-// restart makes the next loop start over without counting, for when the
-// counting window cannot be trusted.
-func (c *queryLogCursor) restart() {
-	c.started = false
-	c.window = map[string]int{}
+	return fresh, gaps, vanished
 }
 
 // reset makes newest the reference time and the counting window the entries

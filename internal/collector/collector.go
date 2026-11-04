@@ -179,28 +179,14 @@ func boolValue(b bool) float64 {
 // failed request leaves the cursor unchanged, so the next loop counts them.
 func (c *Collector) updateQueryLog(ctx context.Context) error {
 	requests := 0
+	c.cursor.begin()
 	entries, limit, complete, err := c.fetchQueryLog(ctx, c.cursor.limit, &requests)
 	if err != nil {
 		return err
 	}
 
-	fresh, gap, vanished := c.cursor.advance(entries, complete)
-	if gap == gapReset {
-		// The cursor moved to a new reference time; read until the response
-		// covers its counting window, so the window holds every entry in it.
-		entries, limit, complete, err = c.fetchQueryLog(ctx, limit, &requests)
-		if err != nil {
-			c.cursor.restart()
-		} else {
-			c.cursor.reset(entries, c.cursor.newest)
-			if !complete {
-				gap = gapLimit
-			}
-		}
-	}
-	if err == nil {
-		c.cursor.nextLimit(entries, limit)
-	}
+	fresh, gaps, vanished := c.cursor.advance(entries, complete)
+	c.cursor.nextLimit(entries, limit)
 
 	geoResolved := 0
 	for _, q := range fresh {
@@ -209,10 +195,11 @@ func (c *Collector) updateQueryLog(ctx context.Context) error {
 		}
 	}
 
-	if gap != "" {
+	for _, gap := range gaps {
 		c.m.exporterQueryLogGaps.WithLabelValues(gap).Inc()
 		logx.Printf("WARN", "Query log gap (%s): entries may have been missed", gap)
-	} else if vanished > 0 {
+	}
+	if len(gaps) == 0 && vanished > 0 {
 		logx.Printf("DEBUG", "Querylog: %d counted entries vanished from the query log (memory buffer overflow in AdGuard Home)", vanished)
 	}
 
@@ -225,7 +212,7 @@ func (c *Collector) updateQueryLog(ctx context.Context) error {
 		geoResolved,
 	)
 
-	return err
+	return nil
 }
 
 // fetchQueryLog requests limit entries and doubles the limit until the
