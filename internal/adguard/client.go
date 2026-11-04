@@ -3,11 +3,14 @@
 package adguard
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/znand-dev/adguardexporter/internal/logx"
@@ -49,6 +52,17 @@ type QueryLog struct {
 
 // QueryLogEntry is one entry of the query log.
 type QueryLogEntry struct {
+	// Time is when the query started. Entries are written when the query
+	// finishes, so the log's write order differs from time order.
+	Time time.Time `json:"time"`
+
+	// ID identifies the entry: a hash of every field AdGuard Home stores for
+	// it, so it is the same in every response. client_info is left out,
+	// because AdGuard Home fills it from its client cache on each request.
+	// Two queries can share an ID if they are identical in every stored
+	// field, timestamp included.
+	ID string `json:"-"`
+
 	Question struct {
 		Type string `json:"type"`
 		Name string `json:"name"`
@@ -65,6 +79,32 @@ type QueryLogEntry struct {
 			OrgName string `json:"orgname"`
 		} `json:"whois"`
 	} `json:"client_info"`
+}
+
+// UnmarshalJSON decodes an entry and computes its ID.
+func (e *QueryLogEntry) UnmarshalJSON(b []byte) error {
+	type plain QueryLogEntry
+	if err := json.Unmarshal(b, (*plain)(e)); err != nil {
+		return err
+	}
+
+	var fields map[string]any
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	if err := dec.Decode(&fields); err != nil {
+		return err
+	}
+	delete(fields, "client_info")
+	// Map keys are marshalled in sorted order at every level, so the encoding
+	// does not depend on the response's key order or formatting.
+	canonical, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256(canonical)
+	e.ID = string(sum[:])
+
+	return nil
 }
 
 // Client talks to one AdGuard Home instance.
@@ -98,14 +138,14 @@ func (c *Client) Status(ctx context.Context) (*Status, error) {
 	return &v, c.get(ctx, "/control/status", &v)
 }
 
-// QueryLog fetches /control/querylog with AdGuard Home's default parameters.
-func (c *Client) QueryLog(ctx context.Context) (*QueryLog, error) {
+// QueryLog fetches the limit most recently written entries of
+// /control/querylog, sorted by time, newest first.
+func (c *Client) QueryLog(ctx context.Context, limit int) (*QueryLog, error) {
 	var v QueryLog
-	return &v, c.get(ctx, "/control/querylog", &v)
+	return &v, c.get(ctx, "/control/querylog?limit="+strconv.Itoa(limit), &v)
 }
 
-// get decodes the body of path into v. Like before the restructuring, the
-// status code is not checked; an error page fails to decode.
+// get decodes the body of path into v. A status other than 200 is an error.
 func (c *Client) get(ctx context.Context, path string, v any) error {
 	pass, err := c.password()
 	if err != nil {
@@ -131,6 +171,9 @@ func (c *Client) get(ctx context.Context, path string, v any) error {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s: %s", path, resp.Status)
 	}
 
 	return json.Unmarshal(body, v)

@@ -10,21 +10,25 @@ adguard_dhcp_available 0
 # HELP adguard_dns_queries_total Total DNS queries received
 # TYPE adguard_dns_queries_total gauge
 adguard_dns_queries_total 0
-# HELP adguard_exporter_dedup_hits_total Total number of duplicate queries skipped by deduplication
+# HELP adguard_exporter_dedup_hits_total Deprecated: always 0, will be removed in the next release. Query log entries are no longer deduplicated by a cache.
 # TYPE adguard_exporter_dedup_hits_total counter
 adguard_exporter_dedup_hits_total 0
 # HELP adguard_exporter_geo_cache_size Current number of cached GeoIP entries
 # TYPE adguard_exporter_geo_cache_size gauge
 adguard_exporter_geo_cache_size 0
-# HELP adguard_exporter_query_cache_size Current number of entries in query deduplication cache
+# HELP adguard_exporter_query_cache_size Deprecated: always 0, will be removed in the next release. Query log entries are no longer deduplicated by a cache.
 # TYPE adguard_exporter_query_cache_size gauge
 adguard_exporter_query_cache_size 0
+# HELP adguard_exporter_querylog_gaps_total Loops in which query log entries may have been missed (reason: limit = more new entries than QUERYLOG_MAX_ENTRIES, reset = entries counted before vanished from the query log)
+# TYPE adguard_exporter_querylog_gaps_total counter
+adguard_exporter_querylog_gaps_total{reason="limit"} 0
+adguard_exporter_querylog_gaps_total{reason="reset"} 0
 # HELP adguard_exporter_scrape_errors_total Total exporter errors
 # TYPE adguard_exporter_scrape_errors_total counter
-adguard_exporter_scrape_errors_total 0
+adguard_exporter_scrape_errors_total 6
 # HELP adguard_exporter_up Exporter scrape success
 # TYPE adguard_exporter_up gauge
-adguard_exporter_up 1
+adguard_exporter_up 0
 # HELP adguard_protection_disabled_duration_seconds Time since protection disabled
 # TYPE adguard_protection_disabled_duration_seconds gauge
 adguard_protection_disabled_duration_seconds 0

@@ -3,6 +3,8 @@ package collector
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -13,11 +15,18 @@ import (
 	"github.com/znand-dev/adguardexporter/internal/geo"
 )
 
+// fakeAPI answers query log requests like AdGuard Home: the limit most
+// recently written entries, sorted by time, newest first.
 type fakeAPI struct {
 	stats    *adguard.Stats
 	status   *adguard.Status
-	log      *adguard.QueryLog
+	written  []adguard.QueryLogEntry
 	statsErr error
+	logErr   error
+	limits   []int
+	// onQueryLog runs before the n-th query log request (1-based) is
+	// answered.
+	onQueryLog func(n int)
 }
 
 func (f *fakeAPI) Stats(context.Context) (*adguard.Stats, error) {
@@ -29,39 +38,66 @@ func (f *fakeAPI) Stats(context.Context) (*adguard.Stats, error) {
 
 func (f *fakeAPI) Status(context.Context) (*adguard.Status, error) { return f.status, nil }
 
-func (f *fakeAPI) QueryLog(context.Context) (*adguard.QueryLog, error) { return f.log, nil }
+func (f *fakeAPI) QueryLog(_ context.Context, limit int) (*adguard.QueryLog, error) {
+	f.limits = append(f.limits, limit)
+	if f.onQueryLog != nil {
+		f.onQueryLog(len(f.limits))
+	}
+	if f.logErr != nil {
+		return nil, f.logErr
+	}
+	start := max(len(f.written)-limit, 0)
+	data := slices.Clone(f.written[start:])
+	slices.Reverse(data)
+	slices.SortStableFunc(data, func(a, b adguard.QueryLogEntry) int { return -a.Time.Compare(b.Time) })
+	return &adguard.QueryLog{Data: data}, nil
+}
 
-func entry(client, name, reason, elapsed string) adguard.QueryLogEntry {
+// write appends entries to the query log in write order.
+func (f *fakeAPI) write(e ...adguard.QueryLogEntry) { f.written = append(f.written, e...) }
+
+// t0 is the reference time of the unit tests.
+var t0 = time.Unix(1_700_000_000, 0)
+
+// entry returns an entry whose ID is derived from its fields, like the
+// client's.
+func entry(at time.Time, client, name, reason, elapsed string) adguard.QueryLogEntry {
 	var e adguard.QueryLogEntry
+	e.Time = at
 	e.Client = client
 	e.Question.Name = name
 	e.Question.Type = "A"
 	e.Reason = reason
 	e.Elapsed = elapsed
+	e.ID = fmt.Sprintf("%s|%s|%s|%s|%s", at.Format(time.RFC3339Nano), client, name, reason, elapsed)
 	return e
 }
 
-func newCollector(t *testing.T, api *fakeAPI) (*Collector, *time.Time) {
+// simple returns an entry at t0+d named after d.
+func simple(d time.Duration) adguard.QueryLogEntry {
+	return entry(t0.Add(d), "192.168.1.10", d.String()+".example", "NotFilteredNotFound", "1")
+}
+
+var testOpts = QueryLogOptions{Overlap: time.Minute, MaxEntries: 20000}
+
+func newCollector(t *testing.T, api *fakeAPI, opts QueryLogOptions) *Collector {
 	t.Helper()
-	c := New(api, geo.New(nil), prometheus.NewRegistry())
-	now := time.Unix(1_700_000_000, 0)
-	c.now = func() time.Time { return now }
-	return c, &now
+	return New(api, geo.New(nil), prometheus.NewRegistry(), opts)
 }
 
 func emptyAPI() *fakeAPI {
-	return &fakeAPI{stats: &adguard.Stats{}, status: &adguard.Status{}, log: &adguard.QueryLog{}}
+	return &fakeAPI{stats: &adguard.Stats{}, status: &adguard.Status{}}
 }
 
 func TestRegistersEveryMetricOnce(t *testing.T) {
 	reg := prometheus.NewRegistry()
-	c := New(emptyAPI(), geo.New(nil), reg)
+	c := New(emptyAPI(), geo.New(nil), reg, testOpts)
 	c.RunOnce(context.Background())
 	if _, err := reg.Gather(); err != nil {
 		t.Fatal(err)
 	}
-	if n := len(c.m.collectors()); n != 30 {
-		t.Errorf("%d collectors, want 30", n)
+	if n := len(c.m.collectors()); n != 31 {
+		t.Errorf("%d collectors, want 31", n)
 	}
 }
 
@@ -72,7 +108,7 @@ func TestStatsAndStatus(t *testing.T) {
 		TopQueriedDomains: []map[string]float64{{"a.example": 2}, {"b.example": 1}},
 	}
 	api.status = &adguard.Status{Version: "v1", Running: true, ProtectionEnabled: false, ProtectionDisabledDuration: 30}
-	c, _ := newCollector(t, api)
+	c := newCollector(t, api, testOpts)
 	c.RunOnce(context.Background())
 
 	if got := testutil.ToFloat64(c.m.dnsQueries); got != 100 {
@@ -92,71 +128,31 @@ func TestStatsAndStatus(t *testing.T) {
 	if got := testutil.ToFloat64(c.m.dnsQueries); got != 100 {
 		t.Errorf("dns_queries = %v after a failed call, want 100", got)
 	}
-	// Today exporter_up is 1 regardless.
+	if got := testutil.ToFloat64(c.m.exporterUp); got != 0 {
+		t.Errorf("exporter_up = %v after a failed call, want 0", got)
+	}
+	if got := testutil.ToFloat64(c.m.exporterErrors); got != 1 {
+		t.Errorf("scrape_errors_total = %v, want 1", got)
+	}
+
+	api.statsErr = nil
+	c.RunOnce(context.Background())
 	if got := testutil.ToFloat64(c.m.exporterUp); got != 1 {
-		t.Errorf("exporter_up = %v", got)
-	}
-}
-
-// The current deduplication drops identical entries within QueryTTL and
-// counts them again afterwards.
-func TestQueryLogDedupTTL(t *testing.T) {
-	api := emptyAPI()
-	api.log = &adguard.QueryLog{Data: []adguard.QueryLogEntry{
-		entry("192.168.1.10", "a.example", "NotFilteredNotFound", "1"),
-		entry("192.168.1.10", "a.example", "NotFilteredNotFound", "1"),
-		entry("192.168.1.10", "b.example", "FilteredBlackList", "1"),
-	}}
-	c, now := newCollector(t, api)
-	reason := func(r string) float64 { return testutil.ToFloat64(c.m.queryCountByReason.WithLabelValues(r)) }
-
-	c.RunOnce(context.Background())
-	if reason("NotFilteredNotFound") != 1 || reason("FilteredBlackList") != 1 {
-		t.Errorf("first loop: allowed %v blocked %v, want 1 and 1", reason("NotFilteredNotFound"), reason("FilteredBlackList"))
-	}
-	if got := testutil.ToFloat64(c.m.exporterDedupHits); got != 1 {
-		t.Errorf("dedup hits = %v, want 1", got)
-	}
-
-	*now = now.Add(QueryTTL - time.Second)
-	c.RunOnce(context.Background())
-	if reason("NotFilteredNotFound") != 1 {
-		t.Errorf("counted again within the TTL")
-	}
-	if got := testutil.ToFloat64(c.m.exporterQueryCacheSize); got != 2 {
-		t.Errorf("query cache size = %v, want 2", got)
-	}
-
-	*now = now.Add(time.Second)
-	c.RunOnce(context.Background())
-	if reason("NotFilteredNotFound") != 2 || reason("FilteredBlackList") != 2 {
-		t.Errorf("after the TTL: allowed %v blocked %v, want 2 and 2", reason("NotFilteredNotFound"), reason("FilteredBlackList"))
-	}
-}
-
-func TestQueryLogCacheCleanup(t *testing.T) {
-	api := emptyAPI()
-	api.log = &adguard.QueryLog{Data: []adguard.QueryLogEntry{entry("192.168.1.10", "a.example", "Rewrite", "1")}}
-	c, now := newCollector(t, api)
-	c.RunOnce(context.Background())
-
-	api.log = &adguard.QueryLog{}
-	*now = now.Add(QueryTTL + time.Second)
-	c.RunOnce(context.Background())
-	if got := testutil.ToFloat64(c.m.exporterQueryCacheSize); got != 0 {
-		t.Errorf("query cache size = %v after the TTL, want 0", got)
+		t.Errorf("exporter_up = %v after recovery, want 1", got)
 	}
 }
 
 func TestQueryLogMetrics(t *testing.T) {
 	api := emptyAPI()
-	e := entry("192.168.1.10", "a.example", "NotFilteredNotFound", "2500")
+	c := newCollector(t, api, testOpts)
+	c.RunOnce(context.Background())
+
+	e := entry(t0, "192.168.1.10", "a.example", "NotFilteredNotFound", "2500")
 	e.Upstream = "1.1.1.1:53"
 	e.ClientInfo.Whois.OrgName = "Example ISP"
 	e.ClientInfo.Whois.Country = "DE"
-	bad := entry("192.168.1.11", "b.example", "NotFilteredNotFound", "n/a")
-	api.log = &adguard.QueryLog{Data: []adguard.QueryLogEntry{e, bad}}
-	c, _ := newCollector(t, api)
+	bad := entry(t0, "192.168.1.11", "b.example", "NotFilteredNotFound", "n/a")
+	api.write(e, bad)
 	c.RunOnce(context.Background())
 
 	if got := testutil.ToFloat64(c.m.queryCountByISP.WithLabelValues("Example ISP", "DE")); got != 1 {
@@ -174,7 +170,7 @@ func TestQueryLogMetrics(t *testing.T) {
 }
 
 func TestRunStops(t *testing.T) {
-	c, _ := newCollector(t, emptyAPI())
+	c := newCollector(t, emptyAPI(), testOpts)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {

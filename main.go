@@ -35,6 +35,8 @@ import (
  - SCRAPE_INTERVAL     : Interval (in seconds) to fetch new stats (default: 15)
  - LOG_LEVEL           : Logging level (options: DEBUG, INFO, WARN, ERROR — default: INFO)
  - GEOIP_DB            : GeoLite2-City.mmdb
+ - QUERYLOG_OVERLAP    : Longest time between a query's start and its query log write (default: 1m)
+ - QUERYLOG_MAX_ENTRIES: Maximum query log entries requested per loop (default: 20000, at most 50000)
 
  Layout:
  - internal/config     : environment parsing
@@ -57,9 +59,13 @@ func main() {
 	}
 
 	logx.Printf("INFO", "Scrape interval set to %ds", int(cfg.Interval.Seconds()))
+	logx.Printf("INFO", "Query log overlap %s, at most %d entries per loop", cfg.QueryLogOverlap, cfg.QueryLogMaxEntries)
 
 	client := adguard.New(cfg.Host, cfg.User, cfg.Password)
-	c := collector.New(client, resolver, prometheus.DefaultRegisterer)
+	c := collector.New(client, resolver, prometheus.DefaultRegisterer, collector.QueryLogOptions{
+		Overlap:    cfg.QueryLogOverlap,
+		MaxEntries: cfg.QueryLogMaxEntries,
+	})
 	go c.Run(context.Background(), cfg.Interval)
 
 	http.Handle("/metrics", promhttp.Handler())
