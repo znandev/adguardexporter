@@ -22,7 +22,6 @@ WORKDIR /
 
 COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /app/adguard-exporter /adguard-exporter
-COPY --from=build /app/GeoLite2-City.mmdb /GeoLite2-City.mmdb
 
 USER 65532:65532
 
