@@ -34,6 +34,11 @@ type Config struct {
 	QueryLogOverlap    time.Duration // QUERYLOG_OVERLAP
 	QueryLogMaxEntries int           // QUERYLOG_MAX_ENTRIES
 
+	// DisableMetrics lists the metrics to turn off (DISABLE_METRICS), split
+	// at commas, without blanks and empty items. The collector checks the
+	// names.
+	DisableMetrics []string
+
 	pass     string // ADGUARD_PASS
 	passFile string // ADGUARD_PASS_FILE
 }
@@ -69,6 +74,12 @@ func Load(getenv func(string) string) Config {
 	c.QueryLogMaxEntries = DefaultQueryLogMaxEntries
 	if n, err := strconv.Atoi(getenv("QUERYLOG_MAX_ENTRIES")); err == nil && n >= 1 {
 		c.QueryLogMaxEntries = min(n, MaxQueryLogMaxEntries)
+	}
+
+	for _, name := range strings.Split(getenv("DISABLE_METRICS"), ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			c.DisableMetrics = append(c.DisableMetrics, name)
+		}
 	}
 
 	return c

@@ -1,6 +1,11 @@
 package collector
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 // metrics holds every metric the exporter exposes.
 type metrics struct {
@@ -39,6 +44,10 @@ type metrics struct {
 	exporterGeoCacheSize   prometheus.Gauge
 	exporterDedupHits      prometheus.Counter
 	exporterQueryLogGaps   *prometheus.CounterVec
+
+	// disabled holds the names of the optional metrics turned off by
+	// DISABLE_METRICS.
+	disabled map[string]bool
 }
 
 func newMetrics() *metrics {
@@ -167,6 +176,7 @@ func newMetrics() *metrics {
 			Help: "Deprecated: always 0, will be removed in the next release. Query log entries are no longer deduplicated by a cache.",
 		}),
 		exporterQueryLogGaps: newGaps(),
+		disabled:             map[string]bool{},
 	}
 }
 
@@ -183,39 +193,99 @@ func newGaps() *prometheus.CounterVec {
 	return g
 }
 
-// collectors lists every metric for registration.
+// optional lists the metrics DISABLE_METRICS can turn off, named without the
+// adguard_ prefix and the _total suffix. drop clears the field; the collector
+// skips nil metrics, so a disabled metric collects no series at all.
+func (m *metrics) optional() []optionalMetric {
+	return []optionalMetric{
+		{"dns_queries", m.dnsQueries, func() { m.dnsQueries = nil }},
+		{"blocked_filtering", m.blockedFiltering, func() { m.blockedFiltering = nil }},
+		{"replaced_parental", m.replacedParental, func() { m.replacedParental = nil }},
+		{"avg_processing_time", m.avgProcessingTime, func() { m.avgProcessingTime = nil }},
+		{"protection_enabled", m.statusProtectionEnabled, func() { m.statusProtectionEnabled = nil }},
+		{"running", m.statusRunning, func() { m.statusRunning = nil }},
+		{"dhcp_available", m.statusDHCPAvailable, func() { m.statusDHCPAvailable = nil }},
+		{"protection_disabled_duration_seconds", m.statusDisabledDuration, func() { m.statusDisabledDuration = nil }},
+		{"version_info", m.versionInfo, func() { m.versionInfo = nil }},
+		{"top_queried_domain", m.topQueriedDomains, func() { m.topQueriedDomains = nil }},
+		{"top_blocked_domain", m.topBlockedDomains, func() { m.topBlockedDomains = nil }},
+		{"top_client", m.topClients, func() { m.topClients = nil }},
+		{"top_upstream", m.topUpstreams, func() { m.topUpstreams = nil }},
+		{"upstream_avg_response_time_seconds", m.topUpstreamTime, func() { m.topUpstreamTime = nil }},
+		{"query_reason", m.queryCountByReason, func() { m.queryCountByReason = nil }},
+		{"query_type", m.queryCountByType, func() { m.queryCountByType = nil }},
+		{"query_elapsed_ms", m.queryHistogramByClient, func() { m.queryHistogramByClient = nil }},
+		{"query_upstream", m.queryCountByUpstream, func() { m.queryCountByUpstream = nil }},
+		{"query_domain", m.queryCountByDomain, func() { m.queryCountByDomain = nil }},
+		{"query_client_reason", m.queryCountClientReason, func() { m.queryCountClientReason = nil }},
+		{"client_geo_queries", m.clientGeoQueries, func() { m.clientGeoQueries = nil }},
+		{"blocked_geo_queries", m.blockedGeoQueries, func() { m.blockedGeoQueries = nil }},
+		{"upstream_latency_seconds", m.upstreamLatencyHistogram, func() { m.upstreamLatencyHistogram = nil }},
+		{"query_isp", m.queryCountByISP, func() { m.queryCountByISP = nil }},
+	}
+}
+
+type optionalMetric struct {
+	name      string
+	collector prometheus.Collector
+	drop      func()
+}
+
+// disable turns off the named optional metrics. It reports every name that
+// is not one of them, so a typo does not silently keep a metric enabled.
+func (m *metrics) disable(names []string) error {
+	optional := m.optional()
+	byName := make(map[string]optionalMetric, len(optional))
+	for _, o := range optional {
+		byName[o.name] = o
+	}
+
+	var problems []string
+	for _, name := range names {
+		o, ok := byName[name]
+		switch {
+		case ok:
+			o.drop()
+			m.disabled[name] = true
+		case strings.HasPrefix(name, "exporter_") || strings.HasPrefix(name, "adguard_exporter_"):
+			problems = append(problems, fmt.Sprintf("%s: the exporter's own metrics cannot be disabled", name))
+		case byName[shortName(name)].name != "":
+			problems = append(problems, fmt.Sprintf("%s: use the short name %s", name, shortName(name)))
+		default:
+			problems = append(problems, fmt.Sprintf("%s: unknown metric", name))
+		}
+	}
+	if len(problems) > 0 {
+		valid := make([]string, 0, len(optional))
+		for _, o := range optional {
+			valid = append(valid, o.name)
+		}
+		return fmt.Errorf("DISABLE_METRICS: %s (valid names: %s)", strings.Join(problems, "; "), strings.Join(valid, ", "))
+	}
+	return nil
+}
+
+// shortName strips the adguard_ prefix and the _total suffix of a full
+// metric name.
+func shortName(name string) string {
+	return strings.TrimSuffix(strings.TrimPrefix(name, "adguard_"), "_total")
+}
+
+// collectors lists every enabled metric for registration.
 func (m *metrics) collectors() []prometheus.Collector {
-	return []prometheus.Collector{
-		m.dnsQueries,
-		m.blockedFiltering,
-		m.replacedParental,
-		m.avgProcessingTime,
-		m.statusProtectionEnabled,
-		m.statusRunning,
-		m.statusDHCPAvailable,
-		m.statusDisabledDuration,
-		m.versionInfo,
-		m.topQueriedDomains,
-		m.topBlockedDomains,
-		m.topClients,
-		m.topUpstreams,
-		m.topUpstreamTime,
-		m.queryCountByReason,
-		m.queryCountByType,
-		m.queryHistogramByClient,
-		m.queryCountByUpstream,
-		m.queryCountByDomain,
-		m.queryCountClientReason,
-		m.clientGeoQueries,
-		m.blockedGeoQueries,
+	var cs []prometheus.Collector
+	for _, o := range m.optional() {
+		if !m.disabled[o.name] {
+			cs = append(cs, o.collector)
+		}
+	}
+	return append(cs,
 		m.exporterUp,
 		m.exporterScrapeDuration,
 		m.exporterErrors,
-		m.upstreamLatencyHistogram,
 		m.exporterQueryCacheSize,
 		m.exporterGeoCacheSize,
 		m.exporterDedupHits,
-		m.queryCountByISP,
 		m.exporterQueryLogGaps,
-	}
+	)
 }

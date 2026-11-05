@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -38,6 +39,7 @@ func TestLoad(t *testing.T) {
 
 		"QUERYLOG_OVERLAP":     "90s",
 		"QUERYLOG_MAX_ENTRIES": "5000",
+		"DISABLE_METRICS":      "query_domain,query_isp",
 	}))
 	want := Config{
 		Host:     "http://adguard:3000",
@@ -49,8 +51,9 @@ func TestLoad(t *testing.T) {
 
 		QueryLogOverlap:    90 * time.Second,
 		QueryLogMaxEntries: 5000,
+		DisableMetrics:     []string{"query_domain", "query_isp"},
 	}
-	if c != want {
+	if !reflect.DeepEqual(c, want) {
 		t.Errorf("Load = %+v, want %+v", c, want)
 	}
 }
@@ -81,6 +84,24 @@ func TestLoadQueryLog(t *testing.T) {
 	}
 	if got := Load(env(map[string]string{"QUERYLOG_MAX_ENTRIES": "100000"})).QueryLogMaxEntries; got != MaxQueryLogMaxEntries {
 		t.Errorf("QUERYLOG_MAX_ENTRIES=100000: %d, want %d", got, MaxQueryLogMaxEntries)
+	}
+}
+
+// DISABLE_METRICS is split at commas; blanks and empty items are dropped.
+// The names are checked by the collector.
+func TestLoadDisableMetrics(t *testing.T) {
+	tests := map[string][]string{
+		"":                            nil,
+		" , ,":                        nil,
+		"query_domain":                {"query_domain"},
+		" query_domain , query_isp ,": {"query_domain", "query_isp"},
+		"query_domain,,query_domian":  {"query_domain", "query_domian"},
+		"adguard_query_domain_total":  {"adguard_query_domain_total"},
+	}
+	for v, want := range tests {
+		if got := Load(env(map[string]string{"DISABLE_METRICS": v})).DisableMetrics; !reflect.DeepEqual(got, want) {
+			t.Errorf("DISABLE_METRICS=%q: %q, want %q", v, got, want)
+		}
 	}
 }
 

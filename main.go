@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,6 +38,7 @@ import (
  - GEOIP_DB            : GeoLite2-City.mmdb
  - QUERYLOG_OVERLAP    : Longest time between a query's start and its query log write (default: 1m)
  - QUERYLOG_MAX_ENTRIES: Maximum query log entries requested per loop (default: 20000, at most 50000)
+ - DISABLE_METRICS     : Comma-separated metrics to turn off, without adguard_ and _total (e.g. query_domain)
 
  Layout:
  - internal/config     : environment parsing
@@ -62,10 +64,20 @@ func main() {
 	logx.Printf("INFO", "Query log overlap %s, at most %d entries per loop", cfg.QueryLogOverlap, cfg.QueryLogMaxEntries)
 
 	client := adguard.New(cfg.Host, cfg.User, cfg.Password)
-	c := collector.New(client, resolver, prometheus.DefaultRegisterer, collector.QueryLogOptions{
-		Overlap:    cfg.QueryLogOverlap,
-		MaxEntries: cfg.QueryLogMaxEntries,
+	c, err := collector.New(client, resolver, prometheus.DefaultRegisterer, collector.Options{
+		QueryLog: collector.QueryLogOptions{
+			Overlap:    cfg.QueryLogOverlap,
+			MaxEntries: cfg.QueryLogMaxEntries,
+		},
+		DisableMetrics: cfg.DisableMetrics,
 	})
+	if err != nil {
+		logx.Printf("ERROR", "%v", err)
+		os.Exit(1)
+	}
+	if len(cfg.DisableMetrics) > 0 {
+		logx.Printf("INFO", "Disabled metrics: %s", strings.Join(cfg.DisableMetrics, ", "))
+	}
 	go c.Run(context.Background(), cfg.Interval)
 
 	http.Handle("/metrics", promhttp.Handler())

@@ -45,16 +45,27 @@ type QueryLogOptions struct {
 	MaxEntries int
 }
 
-// New returns a collector whose metrics are registered with reg.
-func New(api API, resolver *geo.Resolver, reg prometheus.Registerer, opts QueryLogOptions) *Collector {
+// Options configure the collector.
+type Options struct {
+	QueryLog QueryLogOptions
+	// DisableMetrics names the metrics to turn off (DISABLE_METRICS).
+	DisableMetrics []string
+}
+
+// New returns a collector whose enabled metrics are registered with reg. It
+// fails if DisableMetrics holds a name that is not an optional metric.
+func New(api API, resolver *geo.Resolver, reg prometheus.Registerer, opts Options) (*Collector, error) {
 	c := &Collector{
 		api:    api,
 		geo:    resolver,
 		m:      newMetrics(),
-		cursor: newQueryLogCursor(opts.Overlap, opts.MaxEntries),
+		cursor: newQueryLogCursor(opts.QueryLog.Overlap, opts.QueryLog.MaxEntries),
+	}
+	if err := c.m.disable(opts.DisableMetrics); err != nil {
+		return nil, err
 	}
 	reg.MustRegister(c.m.collectors()...)
-	return c
+	return c, nil
 }
 
 // Run updates the metrics every interval until ctx is done.
@@ -108,10 +119,10 @@ func (c *Collector) updateStats(ctx context.Context) error {
 		return err
 	}
 
-	c.m.dnsQueries.Set(stats.NumDNSQueries)
-	c.m.blockedFiltering.Set(stats.NumBlockedFiltering)
-	c.m.replacedParental.Set(stats.NumReplacedParental)
-	c.m.avgProcessingTime.Set(stats.AvgProcessingTime)
+	setGauge(c.m.dnsQueries, stats.NumDNSQueries)
+	setGauge(c.m.blockedFiltering, stats.NumBlockedFiltering)
+	setGauge(c.m.replacedParental, stats.NumReplacedParental)
+	setGauge(c.m.avgProcessingTime, stats.AvgProcessingTime)
 
 	setTop(c.m.topQueriedDomains, stats.TopQueriedDomains)
 	setTop(c.m.topBlockedDomains, stats.TopBlockedDomains)
@@ -134,6 +145,9 @@ func (c *Collector) updateStats(ctx context.Context) error {
 
 // setTop replaces the series of a top list.
 func setTop(g *prometheus.GaugeVec, top []map[string]float64) {
+	if g == nil {
+		return
+	}
 	g.Reset()
 	for _, item := range top {
 		for label, v := range item {
@@ -149,12 +163,14 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 		return err
 	}
 
-	c.m.statusRunning.Set(boolValue(status.Running))
-	c.m.statusProtectionEnabled.Set(boolValue(status.ProtectionEnabled))
-	c.m.statusDHCPAvailable.Set(boolValue(status.DHCPAvailable))
-	c.m.statusDisabledDuration.Set(float64(status.ProtectionDisabledDuration))
+	setGauge(c.m.statusRunning, boolValue(status.Running))
+	setGauge(c.m.statusProtectionEnabled, boolValue(status.ProtectionEnabled))
+	setGauge(c.m.statusDHCPAvailable, boolValue(status.DHCPAvailable))
+	setGauge(c.m.statusDisabledDuration, float64(status.ProtectionDisabledDuration))
 
-	c.m.versionInfo.WithLabelValues(status.Version).Set(1)
+	if c.m.versionInfo != nil {
+		c.m.versionInfo.WithLabelValues(status.Version).Set(1)
+	}
 
 	logx.Printf(
 		"DEBUG",
@@ -166,6 +182,26 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 	)
 
 	return nil
+}
+
+// setGauge, inc and observe update a metric unless DISABLE_METRICS turned it
+// off.
+func setGauge(g prometheus.Gauge, v float64) {
+	if g != nil {
+		g.Set(v)
+	}
+}
+
+func inc(v *prometheus.CounterVec, labels ...string) {
+	if v != nil {
+		v.WithLabelValues(labels...).Inc()
+	}
+}
+
+func observe(h *prometheus.HistogramVec, v float64, labels ...string) {
+	if h != nil {
+		h.WithLabelValues(labels...).Observe(v)
+	}
 }
 
 func boolValue(b bool) float64 {
@@ -236,35 +272,39 @@ func (c *Collector) fetchQueryLog(ctx context.Context, limit int, requests *int)
 // count adds one entry to the query metrics and reports whether its client
 // was resolved by GeoIP.
 func (c *Collector) count(q *adguard.QueryLogEntry) bool {
-	c.m.queryCountByReason.WithLabelValues(q.Reason).Inc()
-	c.m.queryCountByType.WithLabelValues(q.Question.Type).Inc()
+	inc(c.m.queryCountByReason, q.Reason)
+	inc(c.m.queryCountByType, q.Question.Type)
 
 	if elapsedMs, err := strconv.ParseFloat(q.Elapsed, 64); err == nil {
-		c.m.queryHistogramByClient.WithLabelValues(q.Client).Observe(elapsedMs)
+		observe(c.m.queryHistogramByClient, elapsedMs, q.Client)
 		if q.Upstream != "" {
-			c.m.upstreamLatencyHistogram.WithLabelValues(q.Upstream).Observe(elapsedMs / 1000)
+			observe(c.m.upstreamLatencyHistogram, elapsedMs/1000, q.Upstream)
 		}
 	}
 
-	c.m.queryCountByUpstream.WithLabelValues(q.Upstream).Inc()
-	c.m.queryCountByDomain.WithLabelValues(q.Question.Name).Inc()
-	c.m.queryCountClientReason.WithLabelValues(q.Client, q.Reason).Inc()
+	inc(c.m.queryCountByUpstream, q.Upstream)
+	inc(c.m.queryCountByDomain, q.Question.Name)
+	inc(c.m.queryCountClientReason, q.Client, q.Reason)
 
-	loc, resolved := c.geo.Lookup(q.Client)
-	if resolved {
-		lat := fmt.Sprintf("%f", loc.Lat)
-		lon := fmt.Sprintf("%f", loc.Lon)
-		c.m.clientGeoQueries.WithLabelValues(q.Client, loc.Country, lat, lon).Inc()
+	resolved := false
+	if c.m.clientGeoQueries != nil || c.m.blockedGeoQueries != nil {
+		var loc geo.Location
+		loc, resolved = c.geo.Lookup(q.Client)
+		if resolved {
+			lat := fmt.Sprintf("%f", loc.Lat)
+			lon := fmt.Sprintf("%f", loc.Lon)
+			inc(c.m.clientGeoQueries, q.Client, loc.Country, lat, lon)
 
-		if q.Reason == "FilteredBlackList" ||
-			q.Reason == "FilteredSafeBrowsing" ||
-			q.Reason == "FilteredParental" {
-			c.m.blockedGeoQueries.WithLabelValues(q.Client, loc.Country, lat, lon).Inc()
+			if q.Reason == "FilteredBlackList" ||
+				q.Reason == "FilteredSafeBrowsing" ||
+				q.Reason == "FilteredParental" {
+				inc(c.m.blockedGeoQueries, q.Client, loc.Country, lat, lon)
+			}
 		}
 	}
 
 	if isp := q.ClientInfo.Whois.OrgName; isp != "" {
-		c.m.queryCountByISP.WithLabelValues(isp, q.ClientInfo.Whois.Country).Inc()
+		inc(c.m.queryCountByISP, isp, q.ClientInfo.Whois.Country)
 	}
 
 	return resolved

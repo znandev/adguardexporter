@@ -81,6 +81,7 @@ After that, you should got the output like this:
 | `LOG_LEVEL`       | Log Level to analyze, INFO, WARN, DEBUG | ❌      | `DEBUG`,`WARN`,`INFO`        |
 | `QUERYLOG_OVERLAP` | Longest expected time between a query's start and AdGuard Home writing it to the query log (default: `1m`), see [How query log entries are counted](#how-query-log-entries-are-counted) | ❌ | `30s` |
 | `QUERYLOG_MAX_ENTRIES` | Maximum query log entries requested per scrape (default: `20000`, at most `50000`) | ❌ | `5000` |
+| `DISABLE_METRICS` | Comma-separated metrics to turn off, see [Disabling metrics](#disabling-metrics) (default: none) | ❌ | `query_domain,query_isp` |
 
 ---
 
@@ -326,6 +327,45 @@ Metrics used to monitor the exporter itself.
 * `adguard_exporter_geo_cache_size` — Number of cached GeoIP lookup entries.
 * `adguard_exporter_query_cache_size` — **Deprecated**, always 0, will be removed in the next release.
 * `adguard_exporter_dedup_hits_total` — **Deprecated**, always 0, will be removed in the next release.
+
+---
+
+### Disabling metrics
+
+Some metrics have a series per domain, client or ISP and can grow large, e.g. `adguard_query_domain_total`. `DISABLE_METRICS` turns off single metrics, named without the `adguard_` prefix and the `_total` suffix:
+
+```
+DISABLE_METRICS=query_domain,query_isp
+```
+
+A disabled metric is neither exposed nor kept in memory. If both `client_geo_queries` and `blocked_geo_queries` are disabled, the exporter also skips the GeoIP lookups. An unknown name stops the exporter with an error that lists the valid names, so a typo does not leave a metric enabled. The exporter's own `adguard_exporter_*` metrics cannot be disabled.
+
+| Name | Metric |
+|---|---|
+| `dns_queries` | `adguard_dns_queries_total` |
+| `blocked_filtering` | `adguard_blocked_filtering_total` |
+| `replaced_parental` | `adguard_replaced_parental` |
+| `avg_processing_time` | `adguard_avg_processing_time` |
+| `protection_enabled` | `adguard_protection_enabled` |
+| `running` | `adguard_running` |
+| `dhcp_available` | `adguard_dhcp_available` |
+| `protection_disabled_duration_seconds` | `adguard_protection_disabled_duration_seconds` |
+| `version_info` | `adguard_version_info` |
+| `top_queried_domain` | `adguard_top_queried_domain_total` |
+| `top_blocked_domain` | `adguard_top_blocked_domain_total` |
+| `top_client` | `adguard_top_client_total` |
+| `top_upstream` | `adguard_top_upstream_total` |
+| `upstream_avg_response_time_seconds` | `adguard_upstream_avg_response_time_seconds` |
+| `query_reason` | `adguard_query_reason_total` |
+| `query_type` | `adguard_query_type_total` |
+| `query_elapsed_ms` | `adguard_query_elapsed_ms` |
+| `query_upstream` | `adguard_query_upstream_total` |
+| `query_domain` | `adguard_query_domain_total` |
+| `query_client_reason` | `adguard_query_client_reason_total` |
+| `client_geo_queries` | `adguard_client_geo_queries` |
+| `blocked_geo_queries` | `adguard_blocked_geo_queries` |
+| `upstream_latency_seconds` | `adguard_upstream_latency_seconds` |
+| `query_isp` | `adguard_query_isp_total` |
   
 ---
 

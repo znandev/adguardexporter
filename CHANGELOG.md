@@ -4,6 +4,7 @@
 ### ✨ Added
 - `adguard_exporter_querylog_gaps_total{reason}`: scrapes in which query log entries may have been missed (`limit`: more new entries than `QUERYLOG_MAX_ENTRIES`; `reset`: every entry counted in the overlap window vanished, e.g. the query log was cleared)
 - `QUERYLOG_OVERLAP` (default `1m`) and `QUERYLOG_MAX_ENTRIES` (default `20000`, at most `50000`) configure how the query log is read
+- `DISABLE_METRICS` turns off single metrics, e.g. `DISABLE_METRICS=query_domain,query_isp`. Disabled metrics are neither exposed nor kept in memory; without both geo metrics, GeoIP lookups are skipped. An unknown name stops the exporter. By default every metric stays enabled.
 
 ### 🔁 Changed
 - Every query log entry is counted exactly once. Before, the exporter read only AdGuard Home's newest 500 entries per scrape, skipped genuine repeated queries within five minutes, counted entries again after five minutes and recounted up to 500 entries after a restart. Entries already in the log when the exporter starts are no longer counted.
@@ -24,6 +25,7 @@
 - End-to-end tests run the exporter binary against a fake AdGuard Home API and compare `/metrics` with golden files in `testdata/` (`go test ./... -update` rewrites them)
 - Unit tests for every internal package
 - Query log tests for growing limits, identical timestamps at the cut and the window edge, restarts, gaps, clearing, clock steps and failures while reading
+- `DISABLE_METRICS` tests for parsing, every metric name, invalid names, skipped updates and GeoIP lookups
 
 ## v1.1.0 - 2025-06-18
 ### ✨ Added
