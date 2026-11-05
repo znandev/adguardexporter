@@ -22,7 +22,7 @@ jobs:
           go-version: 1.27
 
       - name: Login to GitHub Container Registry
-        run: echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u znand-dev --password-stdin
+        run: echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u znandev --password-stdin
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:

@@ -38,8 +38,8 @@ dockers:
     build_flag_templates:
       - "--platform=linux/amd64"
     image_templates:
-      - ghcr.io/znand-dev/adguardexporter:{{ .Tag }}-amd64
-      - ghcr.io/znand-dev/adguardexporter:latest-amd64
+      - ghcr.io/znandev/adguardexporter:{{ .Tag }}-amd64
+      - ghcr.io/znandev/adguardexporter:latest-amd64
 
   - id: docker-arm64
     ids: [universal]
@@ -50,8 +50,8 @@ dockers:
     build_flag_templates:
       - "--platform=linux/arm64"
     image_templates:
-      - ghcr.io/znand-dev/adguardexporter:{{ .Tag }}-arm64v8
-      - ghcr.io/znand-dev/adguardexporter:latest-arm64v8
+      - ghcr.io/znandev/adguardexporter:{{ .Tag }}-arm64v8
+      - ghcr.io/znandev/adguardexporter:latest-arm64v8
 
   - id: docker-arm
     ids: [universal]
@@ -62,18 +62,18 @@ dockers:
     build_flag_templates:
       - "--platform=linux/arm/v6"
     image_templates:
-      - ghcr.io/znand-dev/adguardexporter:{{ .Tag }}-armv6
-      - ghcr.io/znand-dev/adguardexporter:latest-armv6
+      - ghcr.io/znandev/adguardexporter:{{ .Tag }}-armv6
+      - ghcr.io/znandev/adguardexporter:latest-armv6
 
 docker_manifests:
-  - name_template: ghcr.io/znand-dev/adguardexporter:{{ .Tag }}
+  - name_template: ghcr.io/znandev/adguardexporter:{{ .Tag }}
     image_templates:
-      - ghcr.io/znand-dev/adguardexporter:{{ .Tag }}-amd64
-      - ghcr.io/znand-dev/adguardexporter:{{ .Tag }}-arm64v8
-      - ghcr.io/znand-dev/adguardexporter:{{ .Tag }}-armv6
+      - ghcr.io/znandev/adguardexporter:{{ .Tag }}-amd64
+      - ghcr.io/znandev/adguardexporter:{{ .Tag }}-arm64v8
+      - ghcr.io/znandev/adguardexporter:{{ .Tag }}-armv6
 
-  - name_template: ghcr.io/znand-dev/adguardexporter:latest
+  - name_template: ghcr.io/znandev/adguardexporter:latest
     image_templates:
-      - ghcr.io/znand-dev/adguardexporter:latest-amd64
-      - ghcr.io/znand-dev/adguardexporter:latest-arm64v8
-      - ghcr.io/znand-dev/adguardexporter:latest-armv6
+      - ghcr.io/znandev/adguardexporter:latest-amd64
+      - ghcr.io/znandev/adguardexporter:latest-arm64v8
+      - ghcr.io/znandev/adguardexporter:latest-armv6
