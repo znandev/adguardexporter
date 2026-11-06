@@ -4,6 +4,9 @@
 ### 🔁 Changed
 - Moved to `github.com/oschwald/geoip2-golang/v2`. Lookups, metric names and labels are unchanged; records without coordinates still report `lat` and `lon` as 0.
 
+### 🛠 Fixed
+- CI checks with `go mod tidy -diff` that `go.mod` and `go.sum` are tidy. Before, it ran `go mod tidy` first, so a `go.mod` that could not build passed.
+
 ## v1.3.0 - 2026-11-06
 ### ✨ Added
 - `adguard_exporter_querylog_gaps_total{reason}`: scrapes in which query log entries may have been missed (`limit`: more new entries than `QUERYLOG_MAX_ENTRIES`; `reset`: every entry counted in the overlap window vanished, e.g. the query log was cleared)

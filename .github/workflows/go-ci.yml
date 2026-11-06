@@ -31,8 +31,8 @@ jobs:
  #        restore-keys: |
  #           ${{ runner.os }}-go-
 
-      - name: Install dependencies
-        run: go mod tidy
+      - name: Check that go.mod and go.sum are tidy
+        run: go mod tidy -diff
 
       - name: Run unit tests
         run: go test -v ./...
