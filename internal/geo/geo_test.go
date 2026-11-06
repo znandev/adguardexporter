@@ -2,27 +2,39 @@ package geo
 
 import (
 	"errors"
-	"net"
+	"net/netip"
 	"testing"
 	"time"
 
-	"github.com/oschwald/geoip2-golang"
+	"github.com/oschwald/geoip2-golang/v2"
 )
 
 type fakeDB struct {
 	calls int
 	err   error
+	// last is the address of the latest lookup.
+	last netip.Addr
+	// noCoordinates makes the record lack a location, as records in real
+	// databases can.
+	noCoordinates bool
 }
 
-func (f *fakeDB) City(ip net.IP) (*geoip2.City, error) {
+func (f *fakeDB) City(ip netip.Addr) (*geoip2.City, error) {
 	f.calls++
+	f.last = ip
 	if f.err != nil {
 		return nil, f.err
 	}
+	if f.noCoordinates {
+		var c geoip2.City
+		c.Country.ISOCode = "DE"
+		return &c, nil
+	}
 	var c geoip2.City
-	c.Country.IsoCode = "DE"
-	c.Location.Latitude = 52.52
-	c.Location.Longitude = 13.405
+	c.Country.ISOCode = "DE"
+	lat, lon := 52.52, 13.405
+	c.Location.Latitude = &lat
+	c.Location.Longitude = &lon
 	return &c, nil
 }
 
@@ -42,6 +54,44 @@ func TestLookup(t *testing.T) {
 	}
 	if db.calls != 1 {
 		t.Errorf("database queried %d times, want 1", db.calls)
+	}
+}
+
+// The database gets plain IPv4 addresses, also for IPv4-mapped input. Which
+// addresses are skipped stays as net.ParseIP and net.IP decide it.
+func TestLookupAddressForms(t *testing.T) {
+	tests := []struct {
+		ip   string
+		want string
+	}{
+		{"203.0.113.7", "203.0.113.7"},
+		{"::ffff:203.0.113.7", "203.0.113.7"},
+		{"2001:db8::1", "2001:db8::1"},
+		{"::ffff:10.0.0.1", ""},
+		{"::ffff:127.0.0.1", ""},
+		{"2001:db8::1%eth0", ""},
+	}
+	for _, tt := range tests {
+		db := &fakeDB{}
+		_, ok := New(db).Lookup(tt.ip)
+		if tt.want == "" {
+			if ok || db.calls != 0 {
+				t.Errorf("Lookup(%q) = %v with %d queries, want skipped", tt.ip, ok, db.calls)
+			}
+			continue
+		}
+		if !ok || db.last != netip.MustParseAddr(tt.want) {
+			t.Errorf("Lookup(%q) = %v, queried %v, want %s", tt.ip, ok, db.last, tt.want)
+		}
+	}
+}
+
+// A record without coordinates resolves with 0, 0, which keeps the geo
+// metrics' lat and lon labels as they are for such records.
+func TestLookupWithoutCoordinates(t *testing.T) {
+	loc, ok := New(&fakeDB{noCoordinates: true}).Lookup("203.0.113.7")
+	if !ok || loc != (Location{Country: "DE"}) {
+		t.Errorf("Lookup = %+v, %v, want country only", loc, ok)
 	}
 }
 

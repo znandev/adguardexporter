@@ -2,13 +2,13 @@ package collector
 
 import (
 	"context"
-	"net"
+	"net/netip"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
-	"github.com/oschwald/geoip2-golang"
+	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/znand-dev/adguardexporter/internal/adguard"
@@ -130,7 +130,7 @@ func TestDisabledMetricsCollectNothing(t *testing.T) {
 
 type countingDB struct{ calls int }
 
-func (d *countingDB) City(net.IP) (*geoip2.City, error) {
+func (d *countingDB) City(netip.Addr) (*geoip2.City, error) {
 	d.calls++
 	return &geoip2.City{}, nil
 }
