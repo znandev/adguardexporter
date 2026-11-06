@@ -4,10 +4,11 @@ package geo
 
 import (
 	"net"
+	"net/netip"
 	"sync"
 	"time"
 
-	"github.com/oschwald/geoip2-golang"
+	"github.com/oschwald/geoip2-golang/v2"
 )
 
 // TTL is how long a lookup stays cached.
@@ -22,7 +23,7 @@ type Location struct {
 
 // CityDB is the lookup a GeoLite2 City database provides.
 type CityDB interface {
-	City(ip net.IP) (*geoip2.City, error)
+	City(ip netip.Addr) (*geoip2.City, error)
 }
 
 type cached struct {
@@ -76,15 +77,21 @@ func (r *Resolver) Lookup(ipStr string) (Location, bool) {
 	}
 	r.mu.RUnlock()
 
-	record, err := r.db.City(ip)
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return Location{}, false
+	}
+	record, err := r.db.City(addr.Unmap())
 	if err != nil {
 		return Location{}, false
 	}
 
 	loc := Location{
-		Country: record.Country.IsoCode,
-		Lat:     record.Location.Latitude,
-		Lon:     record.Location.Longitude,
+		Country: record.Country.ISOCode,
+	}
+	if record.Location.HasCoordinates() {
+		loc.Lat = *record.Location.Latitude
+		loc.Lon = *record.Location.Longitude
 	}
 
 	r.mu.Lock()
