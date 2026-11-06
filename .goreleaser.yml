@@ -1,3 +1,5 @@
+version: 2
+
 project_name: adguard-exporter
 
 before:
@@ -8,7 +10,8 @@ builds:
   - id: universal
     main: main.go
     binary: adguard-exporter
-    env: [CGO_ENABLED=0]
+    env:
+      - CGO_ENABLED=0
     goos:
       - linux
       - windows
@@ -17,63 +20,31 @@ builds:
       - amd64
       - arm64
       - arm
+    goarm:
+      - 6
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - LICENSE
       - README.md
 
 checksum:
-  name_template: 'checksums.txt'
+  name_template: checksums.txt
 
-dockers:
-  - id: docker-amd64
-    ids: [universal]
-    goos: linux
-    goarch: amd64
-    use: buildx
+dockers_v2:
+  - id: adguard-exporter
+    ids:
+      - universal
     dockerfile: Dockerfile
-    build_flag_templates:
-      - "--platform=linux/amd64"
-    image_templates:
-      - ghcr.io/znandev/adguardexporter:{{ .Tag }}-amd64
-      - ghcr.io/znandev/adguardexporter:latest-amd64
-
-  - id: docker-arm64
-    ids: [universal]
-    goos: linux
-    goarch: arm64
-    use: buildx
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--platform=linux/arm64"
-    image_templates:
-      - ghcr.io/znandev/adguardexporter:{{ .Tag }}-arm64v8
-      - ghcr.io/znandev/adguardexporter:latest-arm64v8
-
-  - id: docker-arm
-    ids: [universal]
-    goos: linux
-    goarch: arm
-    use: buildx
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--platform=linux/arm/v6"
-    image_templates:
-      - ghcr.io/znandev/adguardexporter:{{ .Tag }}-armv6
-      - ghcr.io/znandev/adguardexporter:latest-armv6
-
-docker_manifests:
-  - name_template: ghcr.io/znandev/adguardexporter:{{ .Tag }}
-    image_templates:
-      - ghcr.io/znandev/adguardexporter:{{ .Tag }}-amd64
-      - ghcr.io/znandev/adguardexporter:{{ .Tag }}-arm64v8
-      - ghcr.io/znandev/adguardexporter:{{ .Tag }}-armv6
-
-  - name_template: ghcr.io/znandev/adguardexporter:latest
-    image_templates:
-      - ghcr.io/znandev/adguardexporter:latest-amd64
-      - ghcr.io/znandev/adguardexporter:latest-arm64v8
-      - ghcr.io/znandev/adguardexporter:latest-armv6
+    images:
+      - ghcr.io/znandev/adguardexporter
+    tags:
+      - "{{ .Tag }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+      - linux/arm/v6
