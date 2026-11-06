@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+### 🗑 Removed
+- `adguard_exporter_dedup_hits_total` and `adguard_exporter_query_cache_size`, deprecated in v1.3.0, where they were always 0. Dashboards and alerts that query them need updating.
+
 ### 🔁 Changed
 - Moved to `github.com/oschwald/geoip2-golang/v2`. Lookups, metric names and labels are unchanged; records without coordinates still report `lat` and `lon` as 0.
 
