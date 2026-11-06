@@ -1802,8 +1802,8 @@
                       "kind": "DataQuery",
                       "spec": {
                         "editorMode": "code",
-                        "expr": "increase(adguard_exporter_dedup_hits_total[5m])",
-                        "legendFormat": "__auto",
+                        "expr": "sum by (reason) (increase(adguard_exporter_querylog_gaps_total[5m]))",
+                        "legendFormat": "{{reason}}",
                         "range": true
                       },
                       "version": "v0"
@@ -1816,10 +1816,10 @@
               "transformations": []
             }
           },
-          "description": "Number of duplicate DNS queries skipped by exporter deduplication.",
+          "description": "Scrapes in which query log entries may have been missed, by reason (limit: more new entries than QUERYLOG_MAX_ENTRIES; reset: every counted entry of the overlap window vanished).",
           "id": 31,
           "links": [],
-          "title": "Deduplicated Queries (last 5m)",
+          "title": "Query Log Gaps (last 5m)",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -1892,24 +1892,6 @@
                       "kind": "DataQuery",
                       "spec": {
                         "editorMode": "code",
-                        "expr": "adguard_exporter_query_cache_size",
-                        "legendFormat": "Query Cache",
-                        "range": true
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "A"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "editorMode": "code",
                         "expr": "adguard_exporter_geo_cache_size",
                         "instant": false,
                         "legendFormat": "GeoIP Cache",
@@ -1917,7 +1899,7 @@
                       },
                       "version": "v0"
                     },
-                    "refId": "B"
+                    "refId": "A"
                   }
                 }
               ],
@@ -1925,10 +1907,10 @@
               "transformations": []
             }
           },
-          "description": "Number of query entries currently stored in exporter deduplication cache.",
+          "description": "Number of client IPs currently stored in the exporter's GeoIP cache.",
           "id": 32,
           "links": [],
-          "title": "Exporter Cache Size",
+          "title": "GeoIP Cache Size",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",

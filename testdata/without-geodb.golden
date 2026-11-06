@@ -10,15 +10,9 @@ adguard_dhcp_available 0
 # HELP adguard_dns_queries_total Total DNS queries received
 # TYPE adguard_dns_queries_total gauge
 adguard_dns_queries_total 1234
-# HELP adguard_exporter_dedup_hits_total Deprecated: always 0, will be removed in the next release. Query log entries are no longer deduplicated by a cache.
-# TYPE adguard_exporter_dedup_hits_total counter
-adguard_exporter_dedup_hits_total 0
 # HELP adguard_exporter_geo_cache_size Current number of cached GeoIP entries
 # TYPE adguard_exporter_geo_cache_size gauge
 adguard_exporter_geo_cache_size 0
-# HELP adguard_exporter_query_cache_size Deprecated: always 0, will be removed in the next release. Query log entries are no longer deduplicated by a cache.
-# TYPE adguard_exporter_query_cache_size gauge
-adguard_exporter_query_cache_size 0
 # HELP adguard_exporter_querylog_gaps_total Loops in which query log entries may have been missed (reason: limit = more new entries than QUERYLOG_MAX_ENTRIES, reset = entries counted before vanished from the query log)
 # TYPE adguard_exporter_querylog_gaps_total counter
 adguard_exporter_querylog_gaps_total{reason="limit"} 0

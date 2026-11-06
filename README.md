@@ -325,8 +325,6 @@ Metrics used to monitor the exporter itself.
 * `adguard_exporter_scrape_errors_total` — Number of failed AdGuard Home API calls.
 * `adguard_exporter_querylog_gaps_total{reason="limit"|"reset"}` — Scrapes in which query log entries may have been missed, see [How query log entries are counted](#how-query-log-entries-are-counted).
 * `adguard_exporter_geo_cache_size` — Number of cached GeoIP lookup entries.
-* `adguard_exporter_query_cache_size` — **Deprecated**, always 0, will be removed in the next release.
-* `adguard_exporter_dedup_hits_total` — **Deprecated**, always 0, will be removed in the next release.
 
 ---
 

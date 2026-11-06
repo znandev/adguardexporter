@@ -305,18 +305,6 @@ func TestCursorEntriesWhileGrowing(t *testing.T) {
 	}
 }
 
-// The deprecated metrics stay at 0.
-func TestDeprecatedMetrics(t *testing.T) {
-	api := emptyAPI()
-	c := newCollector(t, api, testOpts)
-	run(c)
-	api.write(simple(0), simple(0))
-	run(c)
-	if testutil.ToFloat64(c.m.exporterDedupHits) != 0 || testutil.ToFloat64(c.m.exporterQueryCacheSize) != 0 {
-		t.Error("deprecated metrics are not 0")
-	}
-}
-
 // Entries written while the limit grows in a loop that detects a reset are
 // counted exactly once (review of #107): counting and the new window come
 // from the same response.

@@ -40,9 +40,7 @@ type metrics struct {
 	exporterUp             prometheus.Gauge
 	exporterScrapeDuration prometheus.Gauge
 	exporterErrors         prometheus.Counter
-	exporterQueryCacheSize prometheus.Gauge
 	exporterGeoCacheSize   prometheus.Gauge
-	exporterDedupHits      prometheus.Counter
 	exporterQueryLogGaps   *prometheus.CounterVec
 
 	// disabled holds the names of the optional metrics turned off by
@@ -163,17 +161,9 @@ func newMetrics() *metrics {
 			Name: "adguard_exporter_scrape_errors_total",
 			Help: "Total exporter errors",
 		}),
-		exporterQueryCacheSize: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "adguard_exporter_query_cache_size",
-			Help: "Deprecated: always 0, will be removed in the next release. Query log entries are no longer deduplicated by a cache.",
-		}),
 		exporterGeoCacheSize: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "adguard_exporter_geo_cache_size",
 			Help: "Current number of cached GeoIP entries",
-		}),
-		exporterDedupHits: prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "adguard_exporter_dedup_hits_total",
-			Help: "Deprecated: always 0, will be removed in the next release. Query log entries are no longer deduplicated by a cache.",
 		}),
 		exporterQueryLogGaps: newGaps(),
 		disabled:             map[string]bool{},
@@ -283,9 +273,7 @@ func (m *metrics) collectors() []prometheus.Collector {
 		m.exporterUp,
 		m.exporterScrapeDuration,
 		m.exporterErrors,
-		m.exporterQueryCacheSize,
 		m.exporterGeoCacheSize,
-		m.exporterDedupHits,
 		m.exporterQueryLogGaps,
 	)
 }

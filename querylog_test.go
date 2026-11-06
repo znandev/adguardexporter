@@ -357,9 +357,9 @@ func TestQueryLogCleared(t *testing.T) {
 	}
 }
 
-// The deduplication metrics stay for one release, are always 0 and say
-// that they are deprecated. Both gap reasons are present from the start.
-func TestDeprecatedDedupMetrics(t *testing.T) {
+// The deduplication metrics, deprecated in v1.3.0, are gone. Both gap reasons
+// are present from the start.
+func TestExporterMetricsAtStart(t *testing.T) {
 	fake := newFake(t)
 	e := start(t, fake, options{})
 	e.loop()
@@ -369,14 +369,8 @@ func TestDeprecatedDedupMetrics(t *testing.T) {
 
 	body := e.scrape()
 	for _, name := range []string{"adguard_exporter_dedup_hits_total", "adguard_exporter_query_cache_size"} {
-		if !has(t, body, name) {
-			t.Errorf("%s is missing", name)
-		}
-		if got := sum(t, body, name, nil); got != 0 {
-			t.Errorf("%s = %v, want 0", name, got)
-		}
-		if !strings.Contains(body, "# HELP "+name+" Deprecated:") {
-			t.Errorf("%s help does not say it is deprecated", name)
+		if strings.Contains(body, name) {
+			t.Errorf("%s is still exposed", name)
 		}
 	}
 	for _, reason := range []string{"limit", "reset"} {
