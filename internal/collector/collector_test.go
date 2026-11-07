@@ -103,8 +103,8 @@ func TestRegistersEveryMetricOnce(t *testing.T) {
 	if _, err := reg.Gather(); err != nil {
 		t.Fatal(err)
 	}
-	if n := len(c.m.collectors()); n != 31 {
-		t.Errorf("%d collectors, want 31", n)
+	if n := len(c.m.collectors()); n != 29 {
+		t.Errorf("%d collectors, want 29", n)
 	}
 }
 

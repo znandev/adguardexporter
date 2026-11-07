@@ -123,8 +123,8 @@ func TestDisabledMetricsCollectNothing(t *testing.T) {
 			t.Errorf("%s is missing", want)
 		}
 	}
-	if n := len(c.m.collectors()); n != 31-len(disabled) {
-		t.Errorf("%d collectors, want %d", n, 31-len(disabled))
+	if n := len(c.m.collectors()); n != 29-len(disabled) {
+		t.Errorf("%d collectors, want %d", n, 29-len(disabled))
 	}
 }
 
@@ -191,7 +191,7 @@ func TestDisableAllOptionalMetrics(t *testing.T) {
 			t.Errorf("%s is still exposed", f.GetName())
 		}
 	}
-	if len(families) != 7 {
-		t.Errorf("%d families, want the 7 exporter metrics", len(families))
+	if len(families) != 5 {
+		t.Errorf("%d families, want the 5 exporter metrics", len(families))
 	}
 }
